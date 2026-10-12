@@ -7,6 +7,8 @@
 // dice come from the seeded PRNG stored in the state, so any client replaying
 // the same actions gets the same game.
 
+import type { Lang } from "../i18n/lang";
+
 /** Index into GameState.players. Stable for the whole game. */
 export type Seat = number;
 
@@ -152,6 +154,8 @@ export type GameState = {
     schema: 1;
     gameId: string;
     boardId: string;
+    /** Language of the board text and the log, fixed at creation. Missing on older games = "en". */
+    lang?: Lang;
     /** userId of the player who created the game; they control settings and admin actions. */
     creatorUserId: string;
     settings: GameSettings;

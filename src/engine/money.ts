@@ -7,7 +7,7 @@
 import type { BoardDef } from "../boards/types";
 import { resumeTurn } from "./turn";
 import type { Debt, GameState } from "./types";
-import { log, money, playerName } from "./util";
+import { log, money, playerName, tr } from "./util";
 
 export type Charge = Debt & {
     /** Log line when paid on the spot; a generic one is used otherwise. */
@@ -21,13 +21,13 @@ function transfer(s: GameState, d: Debt): void {
     else if (s.settings.freeParkingJackpot) s.jackpot += d.amount;
 }
 
-function creditorLabel(s: GameState, creditor: number | null): string {
-    if (creditor !== null) return playerName(s, creditor);
-    return s.settings.freeParkingJackpot ? "the jackpot" : "the bank";
+function creditorLabel(board: BoardDef, s: GameState, creditor: number | null): string {
+    if (creditor !== null) return playerName(board, s, creditor);
+    return tr(board, s.settings.freeParkingJackpot ? "word.jackpot" : "word.bank");
 }
 
 export function payText(board: BoardDef, s: GameState, d: Debt): string {
-    return `${playerName(s, d.debtor)} paid ${money(board, d.amount)} to ${creditorLabel(s, d.creditor)}.`;
+    return tr(board, "log.paidTo", { name: playerName(board, s, d.debtor), amount: money(board, d.amount), creditor: creditorLabel(board, s, d.creditor) });
 }
 
 /**
@@ -60,7 +60,7 @@ function enterDebt(board: BoardDef, s: GameState, debts: Debt[], resume: "pre-ro
     const p = s.players[debt.debtor];
     log(
         s,
-        `${p.name} owes ${money(board, debt.amount)} to ${creditorLabel(s, debt.creditor)} but has only ${money(board, p.cash)}. Raise cash or declare bankruptcy.`,
+        tr(board, "log.owes", { name: p.name, amount: money(board, debt.amount), creditor: creditorLabel(board, s, debt.creditor), cash: money(board, p.cash) }),
         "bad",
         debt.debtor,
     );

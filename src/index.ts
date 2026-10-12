@@ -18,6 +18,9 @@ import type {
 import * as dd from "./dd";
 import { actionButtonSvg, boardPreviewSvg, tokenSvg } from "./art/index";
 import { BOARDS, getBoard } from "./boards/index";
+import { localizeBoard } from "./boards/localize";
+import { normalizeLang, type Lang } from "./i18n/lang";
+import { ts } from "./i18n/scene";
 import { tilePlacement } from "./boards/layout";
 import type { BoardDef } from "./boards/types";
 import { applyAction, createGame, needsToAct, seatView } from "./engine/index";
@@ -226,9 +229,9 @@ function ingestFrame(el: SubscribedDrawdyElement): void {
     if (el.id !== frameElementId(gameId) || creating.has(gameId)) return;
     let g = games.get(gameId);
     if (!g) {
-        const board = getBoard(env.state.boardId);
-        if (!board) return;
-        g = createRuntime(gameId, board);
+        const base = getBoard(env.state.boardId);
+        if (!base) return;
+        g = createRuntime(gameId, localizeBoard(base, env.state.lang));
     }
     g.session.ingestEnvelope(env);
     const waiting = orphanIntents.get(gameId);
@@ -432,6 +435,19 @@ async function openPanel(): Promise<void> {
     void identity();
 }
 
+/** The panel user's language: driver messages to the panel and the theme picker use it. */
+let uiLang: Lang = "en";
+
+/** Returns true when it changed. */
+function setUiLang(raw: unknown): boolean {
+    if (raw === undefined) return false;
+    const l = normalizeLang(raw);
+    if (l === uiLang) return false;
+    uiLang = l;
+    boardSummaries = null;
+    return true;
+}
+
 function post(message: DriverToWebview): void {
     void dd.tryCmd("command:webview:post-message", { webviewDomId: webviewId, message });
 }
@@ -444,9 +460,10 @@ function themeTokens(): Record<string, string> {
     return out;
 }
 
+/** Theme picker entries in the panel's language. */
 function summaries(): BoardSummary[] {
     if (boardSummaries) return boardSummaries;
-    boardSummaries = BOARDS.map((b) => ({
+    boardSummaries = BOARDS.map((base) => localizeBoard(base, uiLang)).map((b) => ({
         id: b.id,
         name: b.name,
         tagline: b.tagline,
@@ -467,6 +484,7 @@ async function handleMessage(raw: unknown): Promise<void> {
     switch (msg.type) {
         case "ready": {
             panelReady = true;
+            setUiLang(msg.lang);
             await identity();
             post({
                 type: "init",
@@ -486,7 +504,10 @@ async function handleMessage(raw: unknown): Promise<void> {
             return;
         }
         case "create-game":
-            await createNewGame(String(msg.boardId), msg.settings);
+            await createNewGame(String(msg.boardId), msg.settings, normalizeLang(msg.lang ?? uiLang));
+            return;
+        case "lang":
+            if (setUiLang(msg.lang)) post({ type: "boards", boards: summaries() });
             return;
         case "action":
             await handleAction(String(msg.gameId), msg.action);
@@ -602,9 +623,10 @@ function cleanSettings(raw: unknown): Partial<GameSettings> {
     return out as Partial<GameSettings>;
 }
 
-async function createNewGame(boardId: string, rawSettings: unknown): Promise<void> {
-    const board = getBoard(boardId) ?? BOARDS[0];
-    if (!board) return;
+async function createNewGame(boardId: string, rawSettings: unknown, lang: Lang): Promise<void> {
+    const base = getBoard(boardId) ?? BOARDS[0];
+    if (!base) return;
+    const board = localizeBoard(base, lang);
     await identity();
 
     // Center the new frame in the current viewport.
@@ -622,9 +644,9 @@ async function createNewGame(boardId: string, rawSettings: unknown): Promise<voi
     const seed = parseInt(shortHash(`${dd.generateId()}|${Date.now()}|${Math.random()}`), 36) >>> 0;
     let state: GameState;
     try {
-        state = createGame({ gameId, board, creatorUserId: me.userId, seed, settings: cleanSettings(rawSettings) });
+        state = createGame({ gameId, board, creatorUserId: me.userId, seed, lang, settings: cleanSettings(rawSettings) });
     } catch (e) {
-        post({ type: "error", message: `Couldn't create the game: ${e instanceof Error ? e.message : String(e)}` });
+        post({ type: "error", message: ts(uiLang, "cantCreate", { error: e instanceof Error ? e.message : String(e) }) });
         return;
     }
     const frameId = frameElementId(gameId);
@@ -638,8 +660,8 @@ async function createNewGame(boardId: string, rawSettings: unknown): Promise<voi
         await dd.cmd("command:scene:add-drawdy-elements", { elements });
     } catch (e) {
         const msg = dd.isDdError(e, "unauthorized")
-            ? "Board Tycoon needs the scene permission to draw the board."
-            : `Couldn't place the board: ${e instanceof Error ? e.message : String(e)}`;
+            ? ts(uiLang, "needScene")
+            : ts(uiLang, "cantPlace", { error: e instanceof Error ? e.message : String(e) });
         post({ type: "error", message: msg });
         return;
     } finally {
@@ -662,7 +684,7 @@ async function createNewGame(boardId: string, rawSettings: unknown): Promise<voi
 async function handleAction(gameId: string, raw: unknown): Promise<void> {
     const g = games.get(gameId);
     if (!g) {
-        post({ type: "error", message: "That game is no longer on this board." });
+        post({ type: "error", message: ts(uiLang, "gameGone") });
         return;
     }
     if (typeof raw !== "object" || raw === null || typeof (raw as { type?: unknown }).type !== "string") return;
@@ -707,7 +729,7 @@ async function deleteGame(gameId: string): Promise<void> {
     if (!g) return;
     const state = g.session.envelope?.state;
     if (collab === "shared" && state && state.creatorUserId !== me.userId) {
-        post({ type: "error", message: "Only the game's creator can delete it." });
+        post({ type: "error", message: ts(uiLang, "creatorOnlyDelete") });
         return;
     }
     const all = await dd.tryCmd("command:scene:get-drawdy-elements", { properties: ["type"] });
@@ -738,7 +760,7 @@ function bigMoments(board: BoardDef, prev: GameState, next: GameState): void {
     const lines: string[] = [];
     for (const p of next.players) {
         const before = prev.players[p.seat];
-        if (p.bankrupt && before && !before.bankrupt) lines.push(`${p.name} is bankrupt!`);
+        if (p.bankrupt && before && !before.bankrupt) lines.push(ts(board.lang, "bankrupt", { name: p.name }));
     }
     if (next.phase.kind === "game-over" && prev.phase.kind !== "game-over") lines.push(statusText(board, next));
     if (lines.length > 0) void showToast(`${board.name}: ${lines.join(" ")}`);

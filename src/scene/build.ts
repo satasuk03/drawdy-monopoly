@@ -7,8 +7,8 @@
 // can't change text or component schemas): a scoreboard row's id includes a
 // hash of its text, a die's id includes its value and roll. When content
 // changes, the id changes, and the reconciler removes the old element and
-// adds the new one. Things that only change style or position (owner chips,
-// tokens) keep their id and are updated.
+// adds the new one (owner markers too). Things that only change position
+// (tokens) keep their id and are updated.
 
 import type {
     DomElementSchema,
@@ -16,8 +16,9 @@ import type {
     LocalAnimation,
     UpdateableProperties,
 } from "@drawdy/driver-protocol";
-import { boardSvg, diceFaceSvg, diceShadowSvg, hotelSvg, houseSvg, svgDataUrl, tokenSvg, turnRingSvg } from "../art/index";
+import { boardSvg, diceFaceSvg, diceShadowSvg, hotelSvg, houseSvg, ownerBadgeSvg, svgDataUrl, tokenSvg, turnRingSvg } from "../art/index";
 import { formatMoney, type BoardDef } from "../boards/types";
+import { ts } from "../i18n/scene";
 import {
     BOARD,
     CENTER,
@@ -76,6 +77,12 @@ export type ElementSpec = {
     seat?: number;
     /** For dice and their shadows: which die (0 or 1), so each gets its own throw. */
     die?: 0 | 1;
+    /** For scoreboard text: which line it is (with `seat` for player rows), so a change can be animated. */
+    part?: "status" | "name" | "detail" | "footer";
+    /** For buildings: the slot on the tile, so several placed at once drop in one after another. */
+    slot?: number;
+    /** For owner chips: the tile, so an ownership change can be animated. */
+    tile?: number;
 };
 
 export function propsKey(props: LiveProps): string {
@@ -117,35 +124,36 @@ function isOwnable(board: BoardDef, i: number): boolean {
 }
 
 export function tileName(board: BoardDef, i: number): string {
-    return board.tiles[i]?.name ?? `Tile ${i}`;
+    return board.tiles[i]?.name ?? ts(board.lang, "tile", { n: i });
 }
 
-function playerName(state: GameState, seat: number | null | undefined): string {
-    if (seat === null || seat === undefined) return "Nobody";
-    return state.players[seat]?.name || `Player ${seat + 1}`;
+function playerName(board: BoardDef, state: GameState, seat: number | null | undefined): string {
+    if (seat === null || seat === undefined) return ts(board.lang, "nobody");
+    return state.players[seat]?.name || ts(board.lang, "player", { n: seat + 1 });
 }
 
 /** One-line status for the frame name and the scoreboard. */
 export function statusText(board: BoardDef, state: GameState): string {
     const ph = state.phase;
-    const cur = playerName(state, state.current);
+    const lang = board.lang;
+    const cur = playerName(board, state, state.current);
     switch (ph.kind) {
         case "lobby": {
             const n = state.players.length;
-            return `Lobby (${n} player${n === 1 ? "" : "s"})`;
+            return ts(lang, n === 1 ? "lobbyOne" : "lobbyMany", { n });
         }
         case "pre-roll":
-            return `${cur}'s turn`;
+            return ts(lang, "turn", { name: cur });
         case "post-roll":
-            return ph.rollAgain ? `${cur} rolled doubles` : `${cur}'s turn`;
+            return ts(lang, ph.rollAgain ? "doubles" : "turn", { name: cur });
         case "buy-decision":
-            return `${cur} is considering ${tileName(board, ph.tile)}`;
+            return ts(lang, "considering", { name: cur, tile: tileName(board, ph.tile) });
         case "auction":
-            return `Auction: ${tileName(board, ph.auction.tile)}`;
+            return ts(lang, "auction", { tile: tileName(board, ph.auction.tile) });
         case "debt":
-            return `${playerName(state, ph.debt.debtor)} must raise ${formatMoney(board, ph.debt.amount)}`;
+            return ts(lang, "mustRaise", { name: playerName(board, state, ph.debt.debtor), amount: formatMoney(board, ph.debt.amount) });
         case "game-over":
-            return ph.winner === null ? "Game over" : `${playerName(state, ph.winner)} wins!`;
+            return ph.winner === null ? ts(lang, "gameOver") : ts(lang, "wins", { name: playerName(board, state, ph.winner) });
     }
 }
 
@@ -204,8 +212,11 @@ export function turnRingRect(token: Rect): Rect {
 // ---------------------------------------------------------------------------
 // the scene
 
+// "board-img", not "board": the art used to be a component, which Drawdy
+// draws smaller than its box when zoomed out. A new id makes the renderer
+// rebuild the stack on games drawn before the switch.
 export function boardArtId(gameId: string): string {
-    return sceneElementId(gameId, "board");
+    return sceneElementId(gameId, "board-img");
 }
 
 /** Everything the renderer draws for `state` (not the frame, not intent elements). Order = z-order for adds. */
@@ -215,63 +226,54 @@ export function desiredScene(board: BoardDef, state: GameState, origin: Point): 
     const specs: ElementSpec[] = [];
     const pal = board.palette;
 
-    // Board art.
+    // Board art: a native image, so it scales with the canvas at every zoom.
+    // Components still draw above it.
+    const art = boardRect(origin);
     specs.push({
         id: boardArtId(gameId),
         role: "board",
-        schema: imageComponent(boardArtId(gameId), frameId, boardRect(origin), svgDataUrl(boardSvg(board))),
+        schema: {
+            type: "image",
+            drawdyElementId: boardArtId(gameId),
+            frameId,
+            x: art.x,
+            y: art.y,
+            width: art.width,
+            height: art.height,
+            url: svgDataUrl(boardSvg(board)),
+        },
         props: {},
     });
 
-    // Owner chips: one per ownable tile, styled by ownership.
+    // Owner markers: an image component per owned tile (components draw above
+    // the board art; plain shapes would sit under it). Content-addressed by
+    // owner color and mortgage, so a change swaps the element. Created
+    // invisible; the renderer reveals it, stamping it down when it can animate.
     for (let i = 0; i < 40; i++) {
-        if (!isOwnable(board, i)) continue;
-        const id = sceneElementId(gameId, "chip", i);
-        const r = offset(ownerChipRect(i), origin);
         const own = state.ownership[String(i)];
-        const color = own ? state.players[own.owner]?.color ?? "#888888" : "#888888";
-        const props: UpdateableProperties = own
-            ? own.mortgaged
-                ? { fillColor: color, strokeColor: color, opacity: 0.45, strokeDash: "dashed" }
-                : { fillColor: color, strokeColor: color, opacity: 1, strokeDash: "solid" }
-            : { fillColor: color, strokeColor: color, opacity: 0, strokeDash: "solid" };
-        specs.push({
-            id,
-            role: "chip",
-            schema: {
-                type: "shape",
-                componentType: "rect",
-                drawdyElementId: id,
-                frameId,
-                x: r.x,
-                y: r.y,
-                width: r.width,
-                height: r.height,
-                strokeColor: props.strokeColor!,
-                fillColor: props.fillColor!,
-                strokeWidth: 2,
-                strokeDash: props.strokeDash,
-                fillStyle: "solid",
-                cornerRadius: 4,
-                roughness: 0,
-                opacity: props.opacity,
-            },
-            props,
-        });
+        if (!own || !isOwnable(board, i)) continue;
+        const color = state.players[own.owner]?.color ?? "#888888";
+        const id = sceneElementId(gameId, "own", i, shortHash(`${color}|${own.mortgaged ? 1 : 0}`));
+        const r = offset(ownerChipRect(i), origin);
+        const schema = imageComponent(id, frameId, r, svgDataUrl(ownerBadgeSvg(color, own.mortgaged, r.width, r.height)));
+        specs.push({ id, role: "chip", tile: i, schema: { ...schema, opacity: 0 }, props: { opacity: 1 } });
     }
 
     // Buildings.
     for (const [key, own] of Object.entries(state.ownership)) {
         const tile = Number(key);
         if (!own || own.houses <= 0) continue;
+        // Created invisible; the renderer reveals them (dropping them in when it can animate).
         if (own.houses >= 5) {
             const id = sceneElementId(gameId, "hotel", tile);
-            specs.push({ id, role: "building", schema: imageComponent(id, frameId, offset(hotelSlot(tile), origin), svgDataUrl(hotelSvg(undefined, hotelSlot(tile).height > hotelSlot(tile).width))), props: {} });
+            const schema = imageComponent(id, frameId, offset(hotelSlot(tile), origin), svgDataUrl(hotelSvg(undefined, hotelSlot(tile).height > hotelSlot(tile).width)));
+            specs.push({ id, role: "building", slot: 4, schema: { ...schema, opacity: 0 }, props: { opacity: 1 } });
         } else {
             const slots = buildingSlots(tile);
             for (let n = 0; n < own.houses && n < slots.length; n++) {
                 const id = sceneElementId(gameId, "house", tile, n);
-                specs.push({ id, role: "building", schema: imageComponent(id, frameId, offset(slots[n]!, origin), svgDataUrl(houseSvg())), props: {} });
+                const schema = imageComponent(id, frameId, offset(slots[n]!, origin), svgDataUrl(houseSvg()));
+                specs.push({ id, role: "building", slot: n, schema: { ...schema, opacity: 0 }, props: { opacity: 1 } });
             }
         }
     }
@@ -363,12 +365,12 @@ export function desiredScene(board: BoardDef, state: GameState, origin: Point): 
         },
         props: {},
     });
-    const scoreText = (role: string, x: number, y: number, text: string, size: number, color: string, ...key: (string | number)[]) => {
+    const scoreText = (role: string, x: number, y: number, text: string, size: number, color: string, tag: Pick<ElementSpec, "part" | "seat">, ...key: (string | number)[]) => {
         const id = sceneElementId(gameId, role, ...key, shortHash(`${text}|${size}|${color}|${x - origin.x}|${y - origin.y}`));
-        specs.push({ id, role: "score", schema: textEl(id, frameId, x, y, text, size, color), props: {} });
+        specs.push({ id, role: "score", ...tag, schema: textEl(id, frameId, x, y, text, size, color), props: {} });
     };
-    scoreText("sbt", px + 24, py + 24, board.name, 30, pal.text);
-    scoreText("sbs", px + 24, py + 72, statusText(board, state), 18, pal.mutedText);
+    scoreText("sbt", px + 24, py + 24, board.name, 30, pal.text, {});
+    scoreText("sbs", px + 24, py + 72, statusText(board, state), 18, pal.mutedText, { part: "status" });
 
     const counts = new Map<number, number>();
     for (const own of Object.values(state.ownership)) counts.set(own.owner, (counts.get(own.owner) ?? 0) + 1);
@@ -397,23 +399,23 @@ export function desiredScene(board: BoardDef, state: GameState, origin: Point): 
             props: { opacity: p.bankrupt ? 0.35 : 1 },
         });
         const turn = active && state.current === p.seat ? "▶ " : "";
-        const name = `${turn}${p.name || `Player ${p.seat + 1}`}${p.bankrupt ? " (bankrupt)" : ""}`;
-        scoreText("sbn", px + 64, y, name, 24, p.color, p.seat);
+        const name = `${turn}${p.name || ts(board.lang, "player", { n: p.seat + 1 })}${p.bankrupt ? ts(board.lang, "bankruptTag") : ""}`;
+        scoreText("sbn", px + 64, y, name, 24, p.color, { part: "name", seat: p.seat }, p.seat);
         const n = counts.get(p.seat) ?? 0;
         const extras: string[] = [];
         if (p.inJail) extras.push(board.labels.jail);
         const cards = p.jailCards.chance + p.jailCards.chest;
-        if (cards > 0) extras.push(`${cards} jail card${cards === 1 ? "" : "s"}`);
+        if (cards > 0) extras.push(ts(board.lang, cards === 1 ? "jailCardsOne" : "jailCardsMany", { n: cards }));
         const detail = p.bankrupt
-            ? "Out of the game"
-            : [formatMoney(board, p.cash), `${n} propert${n === 1 ? "y" : "ies"}`, ...extras].join(" · ");
-        scoreText("sbd", px + 64, y + 34, detail, 18, pal.text, p.seat);
+            ? ts(board.lang, "outOfGame")
+            : [formatMoney(board, p.cash), ts(board.lang, n === 1 ? "propsOne" : "propsMany", { n }), ...extras].join(" · ");
+        scoreText("sbd", px + 64, y + 34, detail, 18, pal.text, { part: "detail", seat: p.seat }, p.seat);
     });
 
-    const footer = [`Round ${state.round + 1}`];
-    if (state.settings.freeParkingJackpot) footer.push(`Jackpot ${formatMoney(board, state.jackpot)}`);
-    if (state.phase.kind !== "lobby") footer.push(`Houses ${state.housesLeft} · Hotels ${state.hotelsLeft}`);
-    scoreText("sbf", px + 24, py + BOARD - 52, footer.join(" · "), 16, pal.mutedText);
+    const footer = [ts(board.lang, "round", { n: state.round + 1 })];
+    if (state.settings.freeParkingJackpot) footer.push(ts(board.lang, "jackpot", { amount: formatMoney(board, state.jackpot) }));
+    if (state.phase.kind !== "lobby") footer.push(ts(board.lang, "supply", { houses: state.housesLeft, hotels: state.hotelsLeft }));
+    scoreText("sbf", px + 24, py + BOARD - 52, footer.join(" · "), 16, pal.mutedText, { part: "footer" });
 
     return specs;
 }
@@ -442,6 +444,43 @@ export function createGameScene(
     };
     const specs = desiredScene(board, envelope.state, origin);
     return { elements: [frame, ...specs.map((s) => s.schema)], specs };
+}
+
+/** Money that changed hands between two states: `null` is the bank. */
+export type CashFlow = { from: number | null; to: number | null; amount: number };
+
+/**
+ * Who paid whom, reconstructed from cash deltas: the biggest payers are
+ * matched with the biggest receivers first, whatever is left over went to or
+ * came from the bank. Exact for the common cases (rent, buying, salary, a
+ * trade); a plausible picture for multi-party cards.
+ */
+export function cashFlows(prev: GameState, next: GameState): CashFlow[] {
+    const payers: { seat: number; left: number }[] = [];
+    const takers: { seat: number; left: number }[] = [];
+    for (const p of next.players) {
+        const before = prev.players[p.seat];
+        if (!before) continue;
+        const d = p.cash - before.cash;
+        if (d < 0) payers.push({ seat: p.seat, left: -d });
+        else if (d > 0) takers.push({ seat: p.seat, left: d });
+    }
+    payers.sort((a, b) => b.left - a.left || a.seat - b.seat);
+    takers.sort((a, b) => b.left - a.left || a.seat - b.seat);
+    const flows: CashFlow[] = [];
+    for (const p of payers) {
+        for (const t of takers) {
+            if (p.left <= 0) break;
+            const amount = Math.min(p.left, t.left);
+            if (amount <= 0) continue;
+            flows.push({ from: p.seat, to: t.seat, amount });
+            p.left -= amount;
+            t.left -= amount;
+        }
+        if (p.left > 0) flows.push({ from: p.seat, to: null, amount: p.left });
+    }
+    for (const t of takers) if (t.left > 0) flows.push({ from: null, to: t.seat, amount: t.left });
+    return flows;
 }
 
 /** Gentle breathing of the turn ring: scales up and dims, bouncing back and forth forever. */

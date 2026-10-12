@@ -5,6 +5,8 @@
 import type { BoardDef, TileDef } from "../boards/types";
 import { formatMoney } from "../boards/types";
 import type { GameState, LogEntry, Ownership, Player, Seat } from "./types";
+import { engineTr, type EngineKey } from "../i18n/engine";
+import type { Params } from "../i18n/lang";
 
 export const LOG_CAP = 60;
 export const MAX_PLAYERS = 6;
@@ -88,11 +90,16 @@ export function money(board: BoardDef, n: number): string {
 }
 
 export function tileName(board: BoardDef, tile: number): string {
-    return board.tiles[tile]?.name ?? `tile ${tile}`;
+    return board.tiles[tile]?.name ?? tr(board, "word.tile", { n: tile });
 }
 
-export function playerName(s: GameState, seat: Seat | null): string {
-    return seat === null ? "the bank" : s.players[seat]?.name ?? `seat ${seat}`;
+export function playerName(board: BoardDef, s: GameState, seat: Seat | null): string {
+    return seat === null ? tr(board, "word.bank") : s.players[seat]?.name ?? tr(board, "word.seat", { n: seat });
+}
+
+/** A log line or error in the game's language (the board's). */
+export function tr(board: Pick<BoardDef, "lang">, key: EngineKey, params?: Params): string {
+    return engineTr(board.lang, key, params);
 }
 
 export function current(s: GameState): Player {

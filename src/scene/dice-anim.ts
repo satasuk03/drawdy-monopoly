@@ -7,6 +7,10 @@
 // Every track ends on the exact rest pose (offset 0, scale 1, no rotation,
 // opacity 1), so when the animation holds its last frame the die sits where
 // the layout put it.
+//
+// Doubles get a victory lap: after the dice come to rest they jump together
+// and do a full turn (frames appended at the same spacing, so the throw keeps
+// its timing and only the total duration grows).
 
 import type { LocalAnimation, LocalAnimationTransform } from "@drawdy/driver-protocol";
 
@@ -16,6 +20,20 @@ const DROP_HEIGHT = 110;
 const RESTITUTION = 0.45;
 /** Keyframes per phase after the first one: the fall, then bounce 1, 2, 3 (total 28 keyframes). */
 const PHASE_SAMPLES = [9, 8, 6, 4];
+const THROW_FRAMES = 1 + PHASE_SAMPLES.reduce((a, b) => a + b, 0);
+const FRAME_MS = DICE_ANIM_MS / (THROW_FRAMES - 1);
+/** Doubles: a short beat at rest, then the jump. */
+const CHEER_PAUSE = 3;
+const CHEER_FRAMES = 12;
+const CHEER_HEIGHT = 46;
+
+/** Total length of a roll's dice animation. */
+export function diceAnimMs(doubles: boolean): number {
+    return doubles ? Math.round(FRAME_MS * (THROW_FRAMES - 1 + CHEER_PAUSE + CHEER_FRAMES)) : DICE_ANIM_MS;
+}
+
+/** Progress 0..1 of the cheer jump for each appended frame (after the pause). */
+const cheer = () => Array.from({ length: CHEER_PAUSE + CHEER_FRAMES }, (_, i) => Math.max(0, (i + 1 - CHEER_PAUSE) / CHEER_FRAMES));
 
 const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 const easeOutQuart = (t: number) => 1 - (1 - t) ** 4;
@@ -73,15 +91,15 @@ function throwPath(seed: number, die: 0 | 1): Throw {
 
 const clean = (v: number) => (Math.abs(v) < 1e-9 ? 0 : Math.round(v * 1000) / 1000);
 
-function pack(transform: LocalAnimationTransform): LocalAnimation {
+function pack(transform: LocalAnimationTransform, doubles: boolean): LocalAnimation {
     return {
-        time: { durationMs: DICE_ANIM_MS, curve: "linear", repeat: "none" },
+        time: { durationMs: diceAnimMs(doubles), curve: "linear", repeat: "none" },
         animation: { transform, curve: "catmull" },
     };
 }
 
 /** The die itself: slide in, spin down, bounce with a little squash at each impact. */
-export function diceTumble(seed: number, die: 0 | 1): LocalAnimation {
+export function diceTumble(seed: number, die: 0 | 1, doubles = false): LocalAnimation {
     const { frames, x, lift, height } = throwPath(seed, die);
     const last = frames.length - 1;
     const turns = 2 + rand(seed, 30 + die);
@@ -93,27 +111,52 @@ export function diceTumble(seed: number, die: 0 | 1): LocalAnimation {
         return f.impact && i !== last ? 0.1 * RESTITUTION ** bounce : 0;
     };
 
-    return pack({
+    const t: Record<"x" | "y" | "rotation" | "width" | "height" | "opacity", number[]> = {
         x: x.map((v, i) => (i === last ? 0 : clean(v))),
         y: frames.map((f, i) => (i === last ? 0 : clean(-f.h + lift[i]!))),
         rotation: frames.map((f, i) => (i === last ? 0 : clean(-spin * (1 - easeOutQuart(f.u))))),
         width: frames.map((f, i) => (i === last ? 1 : clean(1 + squash(f, i)))),
         height: frames.map((f, i) => (i === last ? 1 : clean(1 - squash(f, i)))),
         opacity: frames.map((_, i) => (i === 0 ? 0 : 1)),
-    });
+    };
+    if (doubles) {
+        // Crouch, leap with a full turn (the same way for both dice), stretch in the air, squash on landing.
+        for (const u of cheer()) {
+            const air = u > 0.15 && u < 0.85 ? (u - 0.15) / 0.7 : -1;
+            const squat = air < 0 && u > 0 && u < 1 ? 0.14 * Math.sin(Math.PI * (u < 0.5 ? u / 0.15 : (1 - u) / 0.15)) : 0;
+            t.x.push(0);
+            t.y.push(air < 0 ? 0 : clean(-CHEER_HEIGHT * 4 * air * (1 - air)));
+            t.rotation.push(air < 0 ? (u >= 0.85 ? clean(Math.PI * 2) : 0) : clean(Math.PI * 2 * easeOutCubic(air)));
+            t.width.push(clean(air < 0 ? 1 + squat : 1 + 0.12 * Math.sin(Math.PI * air)));
+            t.height.push(clean(air < 0 ? 1 - squat : 1 + 0.12 * Math.sin(Math.PI * air)));
+            t.opacity.push(1);
+        }
+    }
+    return pack(t, doubles);
 }
 
 /** The floor shadow: travels with the die, small and faint while it is high, full size when it lands. */
-export function shadowTumble(seed: number, die: 0 | 1): LocalAnimation {
+export function shadowTumble(seed: number, die: 0 | 1, doubles = false): LocalAnimation {
     const { frames, x, height } = throwPath(seed, die);
     const last = frames.length - 1;
     const hmax = Math.max(...height);
     const near = height.map((h) => 1 - Math.max(0, h) / hmax);
-    return pack({
+    const t: Record<"x" | "y" | "width" | "height" | "opacity", number[]> = {
         x: x.map((v, i) => (i === last ? 0 : clean(v))),
         y: frames.map(() => 0),
         width: near.map((n, i) => (i === last ? 1 : clean(0.55 + 0.45 * n))),
         height: near.map((n, i) => (i === last ? 1 : clean(0.55 + 0.45 * n))),
         opacity: near.map((n, i) => (i === 0 ? 0 : i === last ? 1 : clean(0.25 + 0.75 * n))),
-    });
+    };
+    if (doubles) {
+        for (const u of cheer()) {
+            const air = u > 0.15 && u < 0.85 ? 4 * ((u - 0.15) / 0.7) * (1 - (u - 0.15) / 0.7) : 0;
+            t.x.push(0);
+            t.y.push(0);
+            t.width.push(clean(1 - 0.4 * air));
+            t.height.push(clean(1 - 0.4 * air));
+            t.opacity.push(clean(1 - 0.6 * air));
+        }
+    }
+    return pack(t, doubles);
 }

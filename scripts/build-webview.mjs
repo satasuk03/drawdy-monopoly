@@ -1,4 +1,4 @@
-// Inlines webview/styles.css and webview/app.js into webview/index.html and
+// Inlines webview/styles.css and webview/i18n.js + webview/app.js into webview/index.html and
 // writes src/ui/webview-html.ts (plus scripts/webview-html.js for the harness).
 // Usage: node scripts/build-webview.mjs   (npm run webview)
 import { readFileSync, writeFileSync } from "node:fs";
@@ -9,7 +9,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(join(root, p), "utf8");
 
 const css = read("webview/styles.css");
-const js = read("webview/app.js");
+// i18n.js defines BT_I18N, which app.js reads.
+const js = read("webview/i18n.js") + "\n" + read("webview/app.js");
 // Function replacers: avoid "$&"-style patterns in the inlined text being interpreted.
 const html = read("webview/index.html")
     .replace("/*__STYLES__*/", () => css)

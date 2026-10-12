@@ -10,7 +10,7 @@ import { rentFor } from "./rent";
 import { rollDice } from "./rng";
 import { toPostRoll } from "./turn";
 import type { GameState, Seat } from "./types";
-import { activeSeats, current, jailIndex, log, money, ownableTile, ownedTiles, ownerOf, tileName } from "./util";
+import { activeSeats, current, jailIndex, log, money, ownableTile, ownedTiles, ownerOf, tileName, tr } from "./util";
 
 type LandingMod = { nearest?: "railroad" | "utility" };
 
@@ -21,19 +21,19 @@ export function doRoll(board: BoardDef, s: GameState): void {
     const [d1, d2] = rollDice(s);
     s.dice = [d1, d2];
     const doubles = d1 === d2;
-    log(s, `${p.name} rolled ${d1} + ${d2}${doubles ? " (doubles)" : ""}`, "dice", seat);
+    log(s, tr(board, doubles ? "log.rolledDoubles" : "log.rolled", { name: p.name, d1, d2 }), "dice", seat);
 
     if (p.inJail) {
         if (doubles) {
             // Leaves jail and moves, but never rolls again for these doubles.
             releaseFromJail(s, seat);
             s.doublesCount = 0;
-            log(s, `${p.name} rolled doubles and leaves ${tileName(board, jailIndex(board))}.`, "good", seat);
+            log(s, tr(board, "log.leftJailDoubles", { name: p.name, tile: tileName(board, jailIndex(board)) }), "good", seat);
             return moveAndLand(board, s, seat, d1 + d2);
         }
         p.jailTurns++;
         if (p.jailTurns < 3) {
-            log(s, `${p.name} stays in jail.`, "info", seat);
+            log(s, tr(board, "log.staysInJail", { name: p.name }), "info", seat);
             return toPostRoll(s);
         }
         // Third failure: the fine is forced, then the player moves by this roll.
@@ -42,7 +42,7 @@ export function doRoll(board: BoardDef, s: GameState): void {
             debtor: seat,
             creditor: null,
             amount: s.settings.jailFine,
-            text: `${p.name} paid the ${money(board, s.settings.jailFine)} jail fine after three tries.`,
+            text: tr(board, "log.paidJailFineForced", { name: p.name, amount: money(board, s.settings.jailFine) }),
         };
         // If the fine can't be covered, the player is out of jail but in debt;
         // once paid they roll afresh from the jail tile (this roll is discarded).
@@ -53,7 +53,7 @@ export function doRoll(board: BoardDef, s: GameState): void {
     if (doubles) {
         s.doublesCount++;
         if (s.doublesCount >= 3) {
-            log(s, `${p.name} rolled doubles three times in a row.`, "bad", seat);
+            log(s, tr(board, "log.threeDoubles", { name: p.name }), "bad", seat);
             sendToJail(board, s, seat);
             return toPostRoll(s);
         }
@@ -80,7 +80,7 @@ export function sendToJail(board: BoardDef, s: GameState, seat: Seat): void {
     p.inJail = true;
     p.jailTurns = 0;
     if (seat === s.current) s.doublesCount = 0;
-    log(s, `${p.name} landed in jail.`, "bad", seat);
+    log(s, tr(board, "log.landedInJail", { name: p.name }), "bad", seat);
 }
 
 /** Move by `steps`; forward moves that pass or land on GO pay salary. */
@@ -93,7 +93,7 @@ function advance(board: BoardDef, s: GameState, seat: Seat, steps: number): void
         const onGo = p.position === 0;
         const pay = onGo && s.settings.doubleSalaryOnGo ? s.settings.salary * 2 : s.settings.salary;
         p.cash += pay;
-        log(s, `${p.name} ${onGo ? "landed on" : "passed"} ${tileName(board, 0)} and collected ${money(board, pay)}.`, "good", seat);
+        log(s, tr(board, onGo ? "log.landedGo" : "log.passedGo", { name: p.name, tile: tileName(board, 0), amount: money(board, pay) }), "good", seat);
     }
 }
 
@@ -105,7 +105,7 @@ function moveTo(board: BoardDef, s: GameState, seat: Seat, tile: number): void {
 function land(board: BoardDef, s: GameState, seat: Seat, mod: LandingMod): void {
     const p = s.players[seat];
     const tile = board.tiles[p.position];
-    log(s, `${p.name} landed on ${tile.name}.`, "info", seat);
+    log(s, tr(board, "log.landed", { name: p.name, tile: tile.name }), "info", seat);
     switch (tile.kind) {
         case "property":
         case "railroad":
@@ -116,7 +116,7 @@ function land(board: BoardDef, s: GameState, seat: Seat, mod: LandingMod): void 
                 debtor: seat,
                 creditor: null,
                 amount: tile.amount,
-                text: `${p.name} paid ${money(board, tile.amount)} ${tile.name}.`,
+                text: tr(board, "log.paidTax", { name: p.name, amount: money(board, tile.amount), tile: tile.name }),
             };
             if (settle(board, s, [charge], "post-roll")) toPostRoll(s);
             return;
@@ -129,7 +129,7 @@ function land(board: BoardDef, s: GameState, seat: Seat, mod: LandingMod): void 
             return toPostRoll(s);
         case "free-parking":
             if (s.settings.freeParkingJackpot && s.jackpot > 0) {
-                log(s, `${p.name} collected the ${money(board, s.jackpot)} jackpot!`, "good", seat);
+                log(s, tr(board, "log.jackpot", { name: p.name, amount: money(board, s.jackpot) }), "good", seat);
                 p.cash += s.jackpot;
                 s.jackpot = 0;
             }
@@ -151,17 +151,17 @@ function landOnOwnable(board: BoardDef, s: GameState, seat: Seat, mod: LandingMo
     if (o.owner === seat) return toPostRoll(s);
     const owner = s.players[o.owner];
     if (o.mortgaged) {
-        log(s, `${t.name} is mortgaged — no rent.`, "info", seat);
+        log(s, tr(board, "log.mortgagedNoRent", { tile: t.name }), "info", seat);
         return toPostRoll(s);
     }
     if (owner.inJail && !s.settings.rentInJail) {
-        log(s, `${owner.name} is in jail — no rent.`, "info", seat);
+        log(s, tr(board, "log.ownerJailedNoRent", { name: owner.name }), "info", seat);
         return toPostRoll(s);
     }
     let rent: number;
     if (mod.nearest === "utility" && t.kind === "utility") {
         const [a, b] = rollDice(s);
-        log(s, `${p.name} rolled ${a} + ${b} for the utility rent (10×).`, "dice", seat);
+        log(s, tr(board, "log.utilityRoll", { name: p.name, d1: a, d2: b }), "dice", seat);
         rent = 10 * (a + b);
     } else {
         const dice = s.dice ? s.dice[0] + s.dice[1] : 0;
@@ -171,7 +171,7 @@ function landOnOwnable(board: BoardDef, s: GameState, seat: Seat, mod: LandingMo
         debtor: seat,
         creditor: o.owner,
         amount: rent,
-        text: `${p.name} paid ${money(board, rent)} rent to ${owner.name} for ${t.name}.`,
+        text: tr(board, "log.paidRent", { name: p.name, amount: money(board, rent), owner: owner.name, tile: t.name }),
     };
     if (settle(board, s, [charge], "post-roll")) toPostRoll(s);
 }
@@ -181,7 +181,7 @@ function resolveCard(board: BoardDef, s: GameState, seat: Seat, deck: DeckName):
     const idx = drawCard(board, s, deck);
     const card = board[deck][idx];
     if (!card) return toPostRoll(s);
-    log(s, `${p.name} drew ${board.labels[deck]}: ${formatCardText(board, card.text)}`, "card", seat);
+    log(s, tr(board, "log.drewCard", { name: p.name, deck: board.labels[deck], text: formatCardText(board, card.text) }), "card", seat);
     const e = card.effect;
     const others = activeSeats(s).filter((x) => x !== seat);
     switch (e.kind) {
@@ -228,7 +228,7 @@ function resolveCard(board: BoardDef, s: GameState, seat: Seat, deck: DeckName):
             }
             const amount = houses * e.perHouse + hotels * e.perHotel;
             if (amount === 0) {
-                log(s, `${p.name} has no buildings to repair.`, "info", seat);
+                log(s, tr(board, "log.noRepairs", { name: p.name }), "info", seat);
                 return toPostRoll(s);
             }
             if (settle(board, s, [{ debtor: seat, creditor: null, amount }], "post-roll")) toPostRoll(s);

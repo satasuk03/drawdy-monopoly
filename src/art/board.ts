@@ -1,6 +1,7 @@
 // The full 1220x1220 board as one SVG string.
 
 import { formatMoney, type BoardDef, type TileDef } from "../boards/types";
+import { ts } from "../i18n/scene";
 import { BOARD, CENTER, CORNER, tilePlacement } from "../boards/layout";
 import { centerArt } from "./center";
 import { iconBody, iconKey } from "./icons";
@@ -78,7 +79,7 @@ function edgeBody(ctx: Ctx, tile: TileDef, flip: boolean): string {
             const nm = wrapText(tile.name, 88, 13, 2, { bold: true, minSize: 10 });
             out += lines(nm.lines, cx, 24, nm.size * 1.12, nm.size, p.text);
             out += use(ctx, tile.icon ?? "tax", cx - 22, 62, 44, p.accent);
-            out += text("Pay " + formatMoney(board, tile.amount), cx, 134, 13, p.text, { w: 700 });
+            out += text(ts(board.lang, "payTax", { amount: formatMoney(board, tile.amount) }), cx, 134, 13, p.text, { w: 700 });
             break;
         }
         default: {
@@ -121,7 +122,7 @@ function cornerGo(ctx: Ctx, tile: TileDef): string {
         text("GO", 80, 96, 64, p.accent, { w: 900, extra: ` letter-spacing="2"` }) +
         text("GO", 82, 98, 64, p.line, { w: 900, extra: ` letter-spacing="2" opacity=".18"` })+
         (() => {
-            const c = wrapText(`Collect ${formatMoney(board, 200)}`, 140, 12, 1, { bold: true, minSize: 9 });
+            const c = wrapText(ts(board.lang, "collect", { amount: formatMoney(board, 200) }), 140, 12, 1, { bold: true, minSize: 9 });
             return text(c.lines[0]!, 80, 114, c.size, p.text, { w: 700 });
         })() +
         `<path d="M14 136l24-16v9h110v14H38v9z" fill="${p.accent}" stroke="${p.line}" stroke-width="1.5" stroke-linejoin="round"/>`
@@ -146,7 +147,7 @@ function cornerJail(ctx: Ctx, tile: TileDef): string {
         `<path d="M54 28H152M54 118H152" stroke="${p.line}" stroke-width="3"/>` +
         text(board.labels.jail.toUpperCase(), 103, 22, 12, "#fff", { w: 800, extra: ` letter-spacing="1"` }) +
         // visiting strip text
-        `<text transform="translate(30 108) rotate(-90)" font-size="11" font-weight="800" fill="${p.text}" text-anchor="start" textLength="96" lengthAdjust="spacingAndGlyphs">JUST VISITING</text>` +
+        `<text transform="translate(30 108) rotate(-90)" font-size="11" font-weight="800" fill="${p.text}" text-anchor="start" textLength="96" lengthAdjust="spacingAndGlyphs">${escapeXml(ts(board.lang, "justVisiting"))}</text>` +
         text(tile.name, 100, 150, 11, p.mutedText, { w: 700 })
     );
 }

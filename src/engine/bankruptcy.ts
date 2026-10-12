@@ -9,7 +9,7 @@
 import type { BoardDef } from "../boards/types";
 import { returnJailCard } from "./cards";
 import type { GameState, Seat } from "./types";
-import { halfHouseCost, log, money, mortgageInterest, ownableTile, ownedTiles, ownerOf, type PropertyTile } from "./util";
+import { halfHouseCost, log, money, mortgageInterest, ownableTile, ownedTiles, ownerOf, tr, type PropertyTile } from "./util";
 
 export function goBankrupt(board: BoardDef, s: GameState, seat: Seat, creditor: Seat | null): void {
     const p = s.players[seat];
@@ -27,7 +27,7 @@ export function goBankrupt(board: BoardDef, s: GameState, seat: Seat, creditor: 
 
     if (creditor !== null) {
         const c = s.players[creditor];
-        log(s, `${p.name} is bankrupt! ${c.name} takes ${money(board, p.cash)} and all of ${p.name}'s property.`, "bad", seat);
+        log(s, tr(board, "log.bankruptTo", { name: p.name, creditor: c.name, amount: money(board, p.cash) }), "bad", seat);
         c.cash += p.cash;
         for (const i of tiles) {
             const o = ownerOf(s, i)!;
@@ -36,15 +36,15 @@ export function goBankrupt(board: BoardDef, s: GameState, seat: Seat, creditor: 
             const interest = mortgageInterest(ownableTile(board, i)!);
             if (c.cash >= interest) {
                 c.cash -= interest;
-                log(s, `${c.name} paid ${money(board, interest)} interest on mortgaged ${board.tiles[i].name}.`, "info", creditor);
+                log(s, tr(board, "log.paidInterest", { name: c.name, amount: money(board, interest), tile: board.tiles[i].name }), "info", creditor);
             } else {
-                log(s, `Interest on mortgaged ${board.tiles[i].name} is waived.`, "info", creditor);
+                log(s, tr(board, "log.interestWaived", { tile: board.tiles[i].name }), "info", creditor);
             }
         }
         c.jailCards.chance += p.jailCards.chance;
         c.jailCards.chest += p.jailCards.chest;
     } else {
-        log(s, `${p.name} is bankrupt! Their property returns to the bank.`, "bad", seat);
+        log(s, tr(board, "log.bankruptBank", { name: p.name }), "bad", seat);
         for (const i of tiles) delete s.ownership[String(i)];
         for (let k = 0; k < p.jailCards.chance; k++) returnJailCard(board, s, "chance");
         for (let k = 0; k < p.jailCards.chest; k++) returnJailCard(board, s, "chest");

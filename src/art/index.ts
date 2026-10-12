@@ -6,7 +6,7 @@ import { tokenSvgFor } from "./tokens";
 export { boardSvg } from "./board";
 export { boardPreviewSvg, tileCardSvg } from "./cards";
 export { diceFaceSvg, diceShadowSvg } from "./dice";
-export { turnRingSvg } from "./marker";
+export { coinSvg, ownerBadgeSvg, turnRingSvg } from "./marker";
 export { houseSvg, hotelSvg } from "./buildings";
 export { svgDataUrl } from "./util";
 export { ICON_KEYS } from "./icons";

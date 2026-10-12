@@ -83,11 +83,11 @@ export function colorBarRect(index: number): Rect {
     }
 }
 
-/** Thin strip on the outer edge of a tile where the owner's color chip goes. */
+/** Band along the outer edge of a tile where the owner's marker goes. */
 export function ownerChipRect(index: number): Rect {
     const { rect, side } = tilePlacement(index);
-    const d = 12;
-    const inset = 8;
+    const d = 18;
+    const inset = 6;
     switch (side) {
         case "bottom":
             return { x: rect.x + inset, y: rect.y + rect.height - d - 4, width: rect.width - inset * 2, height: d };

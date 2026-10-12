@@ -19,14 +19,18 @@
 <script src="webview-html.js"></script>
 <script src="webview-fixtures.js"></script>
 <script>
-// Usage: webview-harness.html?s=game&theme=dark&click=[data-tab=assets],[data-k="b:Roll"]  (comma-separated selectors, clicked in order)
+// Usage: webview-harness.html?s=game&theme=dark&lang=th&click=[data-tab=assets],[data-k="b:Roll"]  (comma-separated selectors, clicked in order)
 const q = new URLSearchParams(location.search);
 const F = window.TYCOON_FIX;
 let theme = q.get("theme") || "light";
 if (q.has("s")) document.body.classList.add("bare");
 const frame = document.getElementById("f");
 const out = document.getElementById("out");
+const lang = q.get("lang");
 const fake = `<script>
+${lang ? `try { localStorage.removeItem("board-tycoon.lang"); } catch (e) {}
+Object.defineProperty(navigator, "languages", { get: function () { return [${JSON.stringify(lang)}]; } });
+Object.defineProperty(navigator, "language", { get: function () { return ${JSON.stringify(lang)}; } });` : ""}
 window.acquireDrawdyApi = function () {
   return {
     postMessage: function (m) { parent.postMessage({ fromPanel: m }, "*"); },

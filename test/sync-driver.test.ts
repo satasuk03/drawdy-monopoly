@@ -128,8 +128,8 @@ test("driver: create a game, hot-seat join, start, roll — scene and view stay 
     const gameId = (frame.meta as any).tycoon.state.gameId as string;
     assert.equal((frame.meta as any).tycoon.state.settings.startingCash, 2000);
     assert.ok([...host.els.values()].every((e) => e.locked === true), "everything locked");
-    const chips = [...host.els.keys()].filter((id) => id.includes(":chip:"));
-    assert.equal(chips.length, 28);
+    const owners = [...host.els.keys()].filter((id) => id.includes(":own:"));
+    assert.equal(owners.length, 0, "no owner markers before anyone buys");
 
     const act = (action: unknown) => host.message({ type: "action", gameId, action });
     await act({ type: "join", name: "Ada", color: "#ff0000", token: "" });
@@ -172,7 +172,8 @@ test("driver: create a game, hot-seat join, start, roll — scene and view stay 
     // Deleting a token is healed on the next pass.
     const tok = tokens()[0]!;
     await host.issue({ type: "command:scene:remove-drawdy-elements", req: { drawdyElementIds: [tok.id] } });
-    await wait(200);
+    // (The pass that re-adds it may wait for the roll's animation to finish first.)
+    for (let i = 0; i < 40 && !host.els.has(tok.id); i++) await wait(100);
     assert.ok(host.els.has(tok.id), "token re-added");
 
     // Undo-like rollback of the frame meta is re-asserted by the authority.

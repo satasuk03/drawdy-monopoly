@@ -6,6 +6,8 @@
 // through formatMoney() with the board's currency, so a theme reskins prices
 // without changing the balance: Thailand's base 200 shows as ฿20,000.
 
+import type { Lang } from "../i18n/lang";
+
 export type GroupId = string;
 
 /** Keys into the art icon library (src/art/icons.ts). */
@@ -111,6 +113,8 @@ export type BoardPalette = {
 
 export type BoardDef = {
     id: string;
+    /** Set by localizeBoard() when the text is not English. */
+    lang?: Lang;
     name: string;
     tagline: string;
     /** Exactly 40 tiles, index 0 = GO, 10 = jail, 20 = free parking, 30 = go-to-jail. */

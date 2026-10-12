@@ -22,7 +22,7 @@ import { doRoll, releaseFromJail } from "./movement";
 import { acceptError, describe, executeTrade, validateTrade } from "./trade";
 import { checkLastStanding, finishGame, nextTurn, resumeTurn, toPostRoll } from "./turn";
 import type { Action, Actor, GameState, Seat } from "./types";
-import { isInt, log, money, ownableTile } from "./util";
+import { isInt, log, money, ownableTile, tr } from "./util";
 
 /** Seats whose input the game is waiting on. */
 export function needsToAct(state: GameState): Seat[] {
@@ -43,29 +43,29 @@ export function needsToAct(state: GameState): Seat[] {
 }
 
 /** Gate for build / sell / mortgage / unmortgage. Debtors may only raise cash. */
-function assetGate(s: GameState, seat: Seat, raisesCash: boolean): string | null {
+function assetGate(board: BoardDef, s: GameState, seat: Seat, raisesCash: boolean): string | null {
     const ph = s.phase;
     if ((ph.kind === "pre-roll" || ph.kind === "post-roll") && seat === s.current) return null;
-    if (ph.kind === "debt" && ph.debt.debtor === seat) return raisesCash ? null : "Pay off your debt first.";
-    return "You can't manage property right now.";
+    if (ph.kind === "debt" && ph.debt.debtor === seat) return raisesCash ? null : tr(board, "err.payDebtFirst");
+    return tr(board, "err.cantManageNow");
 }
 
-function tradeGate(s: GameState, seat: Seat): string | null {
+function tradeGate(board: BoardDef, s: GameState, seat: Seat): string | null {
     const ph = s.phase;
     if ((ph.kind === "pre-roll" || ph.kind === "post-roll") && seat === s.current) return null;
     if (ph.kind === "debt" && ph.debt.debtor === seat) return null;
-    return "You can only propose trades on your own turn.";
+    return tr(board, "err.tradeOwnTurn");
 }
 
 /** propose-trade is possible for `seat` with some other active player (ignoring the offer's contents). */
-export function canProposeTrade(s: GameState, seat: Seat): boolean {
+export function canProposeTrade(board: BoardDef, s: GameState, seat: Seat): boolean {
     const p = s.players[seat];
     if (!p || p.bankrupt || s.pendingTrade || s.phase.kind === "lobby" || s.phase.kind === "game-over") return false;
-    return tradeGate(s, seat) === null && s.players.some((q) => q.seat !== seat && !q.bankrupt);
+    return tradeGate(board, s, seat) === null && s.players.some((q) => q.seat !== seat && !q.bankrupt);
 }
 
 function tileArg(board: BoardDef, tile: unknown): string | null {
-    return isInt(tile) && tile >= 0 && tile < board.tiles.length ? null : "No such tile.";
+    return isInt(tile) && tile >= 0 && tile < board.tiles.length ? null : tr(board, "err.noSuchTile");
 }
 
 /** Actions allowed while a trade offer is waiting for an answer. */
@@ -73,12 +73,12 @@ const DURING_TRADE = new Set(["accept-trade", "reject-trade", "cancel-trade", "f
 const LOBBY = new Set(["join", "leave", "update-settings", "start", "end-game"]);
 
 export function checkAction(board: BoardDef, s: GameState, a: Action, actor: Actor): string | null {
-    if (!a || typeof a !== "object" || typeof a.type !== "string") return "Malformed action.";
+    if (!a || typeof a !== "object" || typeof a.type !== "string") return tr(board, "err.malformedAction");
     const ph = s.phase;
-    if (ph.kind === "game-over") return "The game is over.";
-    if (ph.kind === "lobby" && !LOBBY.has(a.type)) return "The game hasn't started yet.";
+    if (ph.kind === "game-over") return tr(board, "err.gameOver");
+    if (ph.kind === "lobby" && !LOBBY.has(a.type)) return tr(board, "err.notStarted");
     if (ph.kind !== "lobby" && (a.type === "join" || a.type === "leave" || a.type === "update-settings" || a.type === "start"))
-        return "The game has already started.";
+        return tr(board, "err.alreadyStarted");
 
     // Every seat-bearing action must come from the user controlling that seat
     // (force-skip names the seat being skipped, so it is creator-gated instead).
@@ -86,13 +86,13 @@ export function checkAction(board: BoardDef, s: GameState, a: Action, actor: Act
     if ("seat" in a) {
         seat = a.seat;
         const p = isInt(seat) ? s.players[seat] : undefined;
-        if (!p) return "No such seat.";
+        if (!p) return tr(board, "err.noSuchSeat");
         if (a.type !== "force-skip") {
-            if (p.userId !== actor.userId) return "That seat isn't yours.";
-            if (p.bankrupt) return "You are bankrupt.";
+            if (p.userId !== actor.userId) return tr(board, "err.notYourSeat");
+            if (p.bankrupt) return tr(board, "err.youAreBankrupt");
         }
     }
-    if (s.pendingTrade && !DURING_TRADE.has(a.type)) return "Waiting for the trade offer to be answered.";
+    if (s.pendingTrade && !DURING_TRADE.has(a.type)) return tr(board, "err.tradePending");
     const p = s.players[seat];
 
     switch (a.type) {
@@ -101,82 +101,82 @@ export function checkAction(board: BoardDef, s: GameState, a: Action, actor: Act
         case "leave":
             return null;
         case "update-settings": {
-            if (!actor.isCreator) return "Only the game creator can change settings.";
-            const m = mergeSettings(s.settings, a.settings);
+            if (!actor.isCreator) return tr(board, "err.creatorSettings");
+            const m = mergeSettings(board, s.settings, a.settings);
             return typeof m === "string" ? m : null;
         }
         case "start":
-            if (!actor.isCreator) return "Only the game creator can start the game.";
-            return s.players.length >= 2 ? null : "At least 2 players are needed.";
+            if (!actor.isCreator) return tr(board, "err.creatorStart");
+            return s.players.length >= 2 ? null : tr(board, "err.needTwoPlayers");
 
         case "roll":
-            if (seat !== s.current) return "It's not your turn.";
+            if (seat !== s.current) return tr(board, "err.notYourTurn");
             if (ph.kind === "pre-roll" || (ph.kind === "post-roll" && ph.rollAgain)) return null;
-            return "You can't roll now.";
+            return tr(board, "err.cantRoll");
         case "buy": {
-            if (ph.kind !== "buy-decision" || seat !== s.current) return "There is nothing to buy.";
+            if (ph.kind !== "buy-decision" || seat !== s.current) return tr(board, "err.nothingToBuy");
             const t = ownableTile(board, ph.tile)!;
-            return p.cash >= t.price ? null : `${t.name} costs ${money(board, t.price)}.`;
+            return p.cash >= t.price ? null : tr(board, "err.costs", { tile: t.name, amount: money(board, t.price) });
         }
         case "decline":
-            return ph.kind === "buy-decision" && seat === s.current ? null : "There is nothing to decline.";
+            return ph.kind === "buy-decision" && seat === s.current ? null : tr(board, "err.nothingToDecline");
         case "bid":
-            return bidError(s, seat, a.amount);
+            return bidError(board, s, seat, a.amount);
         case "pass-bid":
-            if (ph.kind !== "auction") return "There is no auction.";
-            return ph.auction.bidders[ph.auction.turn] === seat ? null : "It's not your turn to bid.";
+            if (ph.kind !== "auction") return tr(board, "err.noAuction");
+            return ph.auction.bidders[ph.auction.turn] === seat ? null : tr(board, "err.notYourBid");
         case "pay-jail-fine":
-            if (ph.kind !== "pre-roll" || seat !== s.current || !p.inJail) return "You're not in jail.";
-            return p.cash >= s.settings.jailFine ? null : `The fine is ${money(board, s.settings.jailFine)}.`;
+            if (ph.kind !== "pre-roll" || seat !== s.current || !p.inJail) return tr(board, "err.notInJail");
+            return p.cash >= s.settings.jailFine ? null : tr(board, "err.fineIs", { amount: money(board, s.settings.jailFine) });
         case "use-jail-card":
-            if (ph.kind !== "pre-roll" || seat !== s.current || !p.inJail) return "You're not in jail.";
-            return heldJailDeck(s, seat) ? null : "You have no Get Out of Jail Free card.";
+            if (ph.kind !== "pre-roll" || seat !== s.current || !p.inJail) return tr(board, "err.notInJail");
+            return heldJailDeck(s, seat) ? null : tr(board, "err.noJailCard");
         case "end-turn":
-            if (ph.kind !== "post-roll" || seat !== s.current) return "You can't end your turn now.";
-            return ph.rollAgain ? "You rolled doubles — roll again." : null;
+            if (ph.kind !== "post-roll" || seat !== s.current) return tr(board, "err.cantEndTurn");
+            return ph.rollAgain ? tr(board, "err.rollAgain") : null;
 
         case "build":
-            return assetGate(s, seat, false) ?? tileArg(board, a.tile) ?? buildError(board, s, seat, a.tile);
+            return assetGate(board, s, seat, false) ?? tileArg(board, a.tile) ?? buildError(board, s, seat, a.tile);
         case "sell-building":
-            return assetGate(s, seat, true) ?? tileArg(board, a.tile) ?? sellError(board, s, seat, a.tile);
+            return assetGate(board, s, seat, true) ?? tileArg(board, a.tile) ?? sellError(board, s, seat, a.tile);
         case "mortgage":
-            return assetGate(s, seat, true) ?? tileArg(board, a.tile) ?? mortgageError(board, s, seat, a.tile);
+            return assetGate(board, s, seat, true) ?? tileArg(board, a.tile) ?? mortgageError(board, s, seat, a.tile);
         case "unmortgage":
-            return assetGate(s, seat, false) ?? tileArg(board, a.tile) ?? unmortgageError(board, s, seat, a.tile);
+            return assetGate(board, s, seat, false) ?? tileArg(board, a.tile) ?? unmortgageError(board, s, seat, a.tile);
 
         case "propose-trade":
-            if (s.pendingTrade) return "Another trade is already pending.";
-            return tradeGate(s, seat) ?? validateTrade(board, s, seat, a.to, a.give, a.get);
+            if (s.pendingTrade) return tr(board, "err.tradeAlreadyPending");
+            return tradeGate(board, s, seat) ?? validateTrade(board, s, seat, a.to, a.give, a.get);
         case "accept-trade": {
             const t = s.pendingTrade;
-            if (!t || t.id !== a.tradeId) return "That trade is no longer open.";
-            if (t.to !== seat) return "Only the player the trade was offered to can accept it.";
+            if (!t || t.id !== a.tradeId) return tr(board, "err.tradeClosed");
+            if (t.to !== seat) return tr(board, "err.onlyTargetAccept");
             return acceptError(board, s, t);
         }
         case "reject-trade": {
             const t = s.pendingTrade;
-            if (!t || t.id !== a.tradeId) return "That trade is no longer open.";
-            return t.to === seat ? null : "Only the player the trade was offered to can reject it.";
+            if (!t || t.id !== a.tradeId) return tr(board, "err.tradeClosed");
+            return t.to === seat ? null : tr(board, "err.onlyTargetReject");
         }
         case "cancel-trade": {
             const t = s.pendingTrade;
-            if (!t || t.id !== a.tradeId) return "That trade is no longer open.";
-            return t.from === seat ? null : "Only the proposer can cancel a trade.";
+            if (!t || t.id !== a.tradeId) return tr(board, "err.tradeClosed");
+            return t.from === seat ? null : tr(board, "err.onlyProposerCancel");
         }
 
         case "pay-debt":
-            if (ph.kind !== "debt" || ph.debt.debtor !== seat) return "You don't owe anything.";
-            return p.cash >= ph.debt.amount ? null : `You need ${money(board, ph.debt.amount)} — sell, mortgage or trade first.`;
+            if (ph.kind !== "debt" || ph.debt.debtor !== seat) return tr(board, "err.oweNothing");
+            return p.cash >= ph.debt.amount ? null : tr(board, "err.needCash", { amount: money(board, ph.debt.amount) });
         case "declare-bankruptcy":
-            return ph.kind === "debt" && ph.debt.debtor === seat ? null : "You can only declare bankruptcy when in debt.";
+            return ph.kind === "debt" && ph.debt.debtor === seat ? null : tr(board, "err.bankruptOnlyInDebt");
 
         case "force-skip":
-            if (!actor.isCreator) return "Only the game creator can skip a player.";
-            return needsToAct(s).includes(seat) ? null : "That player isn't holding up the game.";
+            if (!actor.isCreator) return tr(board, "err.creatorSkip");
+            return needsToAct(s).includes(seat) ? null : tr(board, "err.notHoldingUp");
         case "end-game":
-            return actor.isCreator ? null : "Only the game creator can end the game.";
+            return actor.isCreator ? null : tr(board, "err.creatorEnd");
         default:
-            return "Unknown action.";
+            return tr(board, "err.unknownAction");
     }
 }
 
@@ -184,14 +184,14 @@ export function runAction(board: BoardDef, s: GameState, a: Action): void {
     const ph = s.phase;
     switch (a.type) {
         case "join":
-            return doJoin(s, a);
+            return doJoin(board, s, a);
         case "leave":
-            return doLeave(s, a.seat);
+            return doLeave(board, s, a.seat);
         case "update-settings": {
-            s.settings = mergeSettings(s.settings, a.settings) as typeof s.settings;
+            s.settings = mergeSettings(board, s.settings, a.settings) as typeof s.settings;
             s.housesLeft = s.settings.houseSupply;
             s.hotelsLeft = s.settings.hotelSupply;
-            return log(s, "Game settings updated.", "info");
+            return log(s, tr(board, "log.settingsUpdated"), "info");
         }
         case "start":
             return doStart(board, s);
@@ -203,12 +203,12 @@ export function runAction(board: BoardDef, s: GameState, a: Action): void {
             const t = ownableTile(board, ph.tile)!;
             s.players[a.seat].cash -= t.price;
             s.ownership[String(ph.tile)] = { owner: a.seat, houses: 0, mortgaged: false };
-            log(s, `${s.players[a.seat].name} bought ${t.name} for ${money(board, t.price)}.`, "good", a.seat);
+            log(s, tr(board, "log.bought", { name: s.players[a.seat].name, tile: t.name, amount: money(board, t.price) }), "good", a.seat);
             return toPostRoll(s);
         }
         case "decline":
             if (ph.kind !== "buy-decision") return;
-            log(s, `${s.players[a.seat].name} declined ${board.tiles[ph.tile].name}.`, "info", a.seat);
+            log(s, tr(board, "log.declined", { name: s.players[a.seat].name, tile: board.tiles[ph.tile].name }), "info", a.seat);
             return decline(board, s, ph.tile, s.settings.auctionOnDecline);
         case "bid":
             return placeBid(board, s, a.seat, a.amount);
@@ -216,7 +216,7 @@ export function runAction(board: BoardDef, s: GameState, a: Action): void {
             return passBid(board, s, a.seat);
         case "pay-jail-fine": {
             const p = s.players[a.seat];
-            const text = `${p.name} paid the ${money(board, s.settings.jailFine)} jail fine.`;
+            const text = tr(board, "log.paidJailFine", { name: p.name, amount: money(board, s.settings.jailFine) });
             settle(board, s, [{ debtor: a.seat, creditor: null, amount: s.settings.jailFine, text }], "pre-roll");
             return releaseFromJail(s, a.seat);
         }
@@ -225,7 +225,7 @@ export function runAction(board: BoardDef, s: GameState, a: Action): void {
             s.players[a.seat].jailCards[deck]--;
             returnJailCard(board, s, deck);
             releaseFromJail(s, a.seat);
-            return log(s, `${s.players[a.seat].name} used a Get Out of Jail Free card.`, "good", a.seat);
+            return log(s, tr(board, "log.usedJailCard", { name: s.players[a.seat].name }), "good", a.seat);
         }
         case "end-turn":
             return nextTurn(board, s);
@@ -248,16 +248,16 @@ export function runAction(board: BoardDef, s: GameState, a: Action): void {
                 get: { cash: a.get.cash, tiles: [...a.get.tiles], jailCards: a.get.jailCards },
             };
             s.pendingTrade = trade;
-            return log(s, `${s.players[a.seat].name} offered ${s.players[a.to].name} a trade: ${describe(board, s, trade)}.`, "info", a.seat);
+            return log(s, tr(board, "log.tradeOffered", { name: s.players[a.seat].name, other: s.players[a.to].name, trade: describe(board, s, trade) }), "info", a.seat);
         }
         case "accept-trade":
             return executeTrade(board, s, s.pendingTrade!);
         case "reject-trade":
             s.pendingTrade = null;
-            return log(s, `${s.players[a.seat].name} rejected the trade.`, "info", a.seat);
+            return log(s, tr(board, "log.tradeRejected", { name: s.players[a.seat].name }), "info", a.seat);
         case "cancel-trade":
             s.pendingTrade = null;
-            return log(s, `${s.players[a.seat].name} withdrew the trade offer.`, "info", a.seat);
+            return log(s, tr(board, "log.tradeWithdrawn", { name: s.players[a.seat].name }), "info", a.seat);
 
         case "pay-debt":
             return payDebt(board, s);
@@ -267,7 +267,7 @@ export function runAction(board: BoardDef, s: GameState, a: Action): void {
         case "force-skip":
             return forceSkip(board, s, a.seat);
         case "end-game":
-            log(s, "The game creator ended the game.", "info");
+            log(s, tr(board, "log.creatorEnded"), "info");
             if (ph.kind === "lobby") {
                 s.phase = { kind: "game-over", winner: null, reason: "ended" };
                 return;
@@ -295,10 +295,10 @@ function forceSkip(board: BoardDef, s: GameState, seat: Seat): void {
     const name = s.players[seat].name;
     if (s.pendingTrade) {
         s.pendingTrade = null;
-        return log(s, `The game creator cancelled the pending trade.`, "info");
+        return log(s, tr(board, "log.creatorCancelledTrade"), "info");
     }
     const ph = s.phase;
-    log(s, `The game creator skipped ahead for ${name}.`, "info", seat);
+    log(s, tr(board, "log.creatorSkipped", { name }), "info", seat);
     switch (ph.kind) {
         case "pre-roll":
             return doRoll(board, s);

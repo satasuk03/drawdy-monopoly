@@ -16,13 +16,16 @@ export function fontAttr(stack: string): string {
 
 const THAI = /[฀-๿]/;
 const COMBINING = /[ัิ-ฺ็-๎]/;
+/** Han, kana and full-width punctuation: one em each, and a line may break between any two. */
+const CJK = /[\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]/;
 
 /** Rough advance width of a string in em units. */
 export function textEm(s: string, bold = false): number {
     let w = 0;
     for (const ch of s) {
         if (COMBINING.test(ch)) continue;
-        if (THAI.test(ch)) w += 0.52;
+        if (CJK.test(ch)) w += 1;
+        else if (THAI.test(ch)) w += 0.52;
         else if (/[A-Z]/.test(ch)) w += bold ? 0.7 : 0.66;
         else if (/[ilI.,'!|:;]/.test(ch)) w += 0.3;
         else if (/[mwMW]/.test(ch)) w += 0.85;
@@ -42,6 +45,8 @@ function segments(text: string): string[] {
             /* fall through */
         }
     }
+    // CJK: every character is a break point; punctuation stays with the character before it.
+    if (CJK.test(text)) return text.match(/[\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef][\u3001\u3002\uff0c\uff01\uff1f\uff1a\uff1b\u300d\u300f\uff09]*\s*|[^\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]+/g) ?? [text];
     // Latin: keep words with their trailing space.
     return text.match(/\S+\s*|\s+/g) ?? [text];
 }

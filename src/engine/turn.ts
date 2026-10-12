@@ -3,7 +3,7 @@
 import type { BoardDef } from "../boards/types";
 import { netWorth } from "./rent";
 import type { GameState, Seat } from "./types";
-import { activeSeats, current, log, money } from "./util";
+import { activeSeats, current, log, money, tr } from "./util";
 
 /**
  * The current player rolls again iff their last normal roll this turn was
@@ -42,11 +42,11 @@ export function nextTurn(board: BoardDef, s: GameState): void {
     s.current = next;
     s.doublesCount = 0;
     if (s.settings.roundLimit > 0 && s.round >= s.settings.roundLimit) {
-        log(s, `Round limit of ${s.settings.roundLimit} reached.`, "info");
+        log(s, tr(board, "log.roundLimit", { count: s.settings.roundLimit }), "info");
         return finishGame(board, s, "round-limit");
     }
     s.phase = { kind: "pre-roll" };
-    log(s, `${current(s).name}'s turn.`, "info", next);
+    log(s, tr(board, "log.turn", { name: current(s).name }), "info", next);
 }
 
 /** Highest net worth among active players; ties go to the lower seat. */
@@ -67,11 +67,11 @@ export function finishGame(board: BoardDef, s: GameState, reason: "last-standing
     const winner = reason === "last-standing" ? (activeSeats(s)[0] ?? null) : leader(board, s);
     s.phase = { kind: "game-over", winner, reason };
     s.pendingTrade = null;
-    if (winner === null) log(s, "The game is over.", "info");
+    if (winner === null) log(s, tr(board, "log.gameOver"), "info");
     else
         log(
             s,
-            `Game over — ${s.players[winner].name} wins with a net worth of ${money(board, netWorth(board, s, winner))}.`,
+            tr(board, "log.winner", { name: s.players[winner].name, amount: money(board, netWorth(board, s, winner)) }),
             "good",
             winner,
         );

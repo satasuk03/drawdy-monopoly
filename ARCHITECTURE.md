@@ -30,6 +30,7 @@ src/
     index.ts            public API (see below)
   sync/                 multiplayer over the scene: envelope, intents, authority, failover
   scene/                render GameState onto the canvas (authority only)
+  i18n/                 languages (en, th, zh, es): lang.ts (Lang, normalizeLang, makeTr), engine.ts / scene.ts string tables
   ui/
     messages.ts         ★ contract: driver ⇄ webview
     webview-html.ts     GENERATED from webview/ by scripts/build-webview.mjs — committed
@@ -38,6 +39,13 @@ test/                   node:test via tsx — engine tests mostly
 ```
 
 ★ = shared contracts. Don't change them without telling the orchestrator; if you must add a field, add it (optional when possible) and mention it in your report.
+
+## Languages
+
+- **Game language** (`GameState.lang`, missing = `en`) is chosen at creation and never changes. Everything on the shared canvas and in shared state uses it: board art, tile names, cards, tokens, scoreboard, frame name, the game log and engine errors.
+- **Board content**: themes are written in English; `src/boards/i18n/<theme>.ts` holds a `BoardText` per language and `localizeBoard(board, lang)` (`src/boards/localize.ts`) overlays it and sets `board.lang`, adding script-capable fonts. The driver localizes the board once per game, so engine, art and scene only ever read `board.lang` and translated names.
+- **Panel language** is per user (saved choice, else `navigator.language`), sent to the driver in `ready` / `lang` messages. The panel chrome (`webview/i18n.js`), the theme picker and the driver's error messages to the panel use it.
+- `test/i18n.test.ts` checks every theme is fully translated with the same `{money:N}` placeholders.
 
 ## Engine API (`src/engine/index.ts`)
 
@@ -82,11 +90,12 @@ type GameEnvelope = {
 
 The authority renders; others just see synced elements. Everything lives inside the game frame (frame `x,y` = board origin minus padding) and is `locked: true`.
 
-- **Board art**: one `component` element whose schema is an `image` with a `data:image/svg+xml,…` URL of `boardSvg(board)` (1220×1220). Keep the SVG lean (it syncs).
-- **Owner chips**: one `shape` rect per ownable tile at `ownerChipRect(i)`, created once with `opacity: 0`; on change update `fillColor` = owner color, `opacity` 1 (0.45 + `strokeDash: "dashed"` when mortgaged).
+- **Board art**: one native `image` element (id `…:board-img`) with a `data:image/svg+xml,…` URL of `boardSvg(board)` (1220×1220). Not a component: as a component, Drawdy drew it smaller than its box when zoomed out (phones, desktop zoomed far out), so the board drifted away from the chips and tokens. Keep the SVG lean (it syncs).
+- **Owner markers**: one image component per owned tile at `ownerChipRect(i)` (`ownerBadgeSvg`: band in the owner color, hatched when mortgaged). Components, not shapes: shapes render under the board art component. Id hashes color + mortgage, so changes swap the element.
 - **Buildings**: components with `houseSvg`/`hotelSvg` at `buildingSlots(i)` / `hotelSlot(i)`; add/remove on change (deterministic ids).
-- **Tokens**: one component per player at `tokenRect(pos, slot, jailed)`. Moves are animated by hopping tile-by-tile with `transform` updates (~90 ms/step); jumps (jail, cards backwards) go direct.
-- **Dice**: two components in the center showing `state.dice`, re-created on change, short `localAnimation` wobble.
+- **Tokens**: one component per player at `tokenRect(pos, slot, jailed)`. A move is one update: final `transform` plus a baked `localAnimation` (`scene/fx.ts`) — hop tile by tile, or leap (jail, cards, backwards), or a little skip when making room on a tile.
+- **Dice**: two components in the center showing `state.dice`, re-created on change, thrown in with a baked tumble (`scene/dice-anim.ts`); doubles add a cheer jump.
+- **Juice** (`scene/fx.ts`, all baked keyframes, synced to everyone as `localAnimation`): an animated pass runs chips stamp / houses drop → dice → moves → shockwave + ring pop on landing → coins fly payer→payee (`cashFlows`) → scoreboard text swaps with a punch (green/red flash). Transient effect elements (`${gameId}:fx:…`: shockwaves, coins, confetti) are added hidden, revealed with their animation, removed by timer; leftovers are swept as stale by discovery.
 - **Scoreboard**: text/shape elements to the right of the board (name, cash, current-turn marker), rebuilt when it changes.
 - **Frame name** shows status: `Board Tycoon · Thailand — Somchai's turn`.
 

@@ -57,6 +57,8 @@ export type DriverToWebview =
           themeTokens: Record<string, string>;
           themeMode: "dark" | "light";
       }
+    /** Theme picker entries again, after the panel switched language. */
+    | { type: "boards"; boards: BoardSummary[] }
     | { type: "theme"; themeTokens: Record<string, string>; themeMode: "dark" | "light" }
     /** Games on the board; `selected` is the one the panel shows (null → lobby/new-game screen). */
     | { type: "games"; games: GameSummary[]; selected: string | null }
@@ -66,9 +68,13 @@ export type DriverToWebview =
 
 /** webview → driver */
 export type WebviewToDriver =
-    | { type: "ready" }
+    /** `lang`: the panel's language (navigator / saved choice), so the driver can match it. */
+    | { type: "ready"; lang?: string }
+    /** The user switched the panel language. */
+    | { type: "lang"; lang: string }
     /** Create a new game frame on the canvas near the viewport and select it. */
-    | { type: "create-game"; boardId: string; settings: Partial<GameSettings> }
+    /** `lang`: the game's language (board text, scoreboard, log), fixed for the game's life. Defaults to the panel's. */
+    | { type: "create-game"; boardId: string; settings: Partial<GameSettings>; lang?: string }
     | { type: "select-game"; gameId: string | null }
     /**
      * Send an engine action for the selected game. For `join` the driver fills

@@ -26,6 +26,13 @@ Install it, click the Board Tycoon toolbar button, create a game, invite friends
 | Space or Enter | Primary action for the current step |
 | Focus board | Fly the camera to the game board, or to one tile |
 
+## Languages
+
+English, Thai (ไทย), Chinese (中文) and Spanish (Español).
+
+- **Game language**: picked when you create a game. The board, cards, scoreboard and game log use it for everyone at the table.
+- **Panel language**: each player picks their own in the panel header. It defaults to your browser's language.
+
 ## Rules
 
 The game uses the official US rules (2008 onward): movement, rent, property auctions, even building across color groups, rent collected in jail, and building supply limits. The house rules below change the defaults.

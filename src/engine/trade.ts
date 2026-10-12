@@ -4,14 +4,14 @@
 import type { BoardDef } from "../boards/types";
 import { heldJailDeck } from "./cards";
 import type { GameState, Seat, Trade, TradeOffer } from "./types";
-import { groupHasBuildings, isInt, log, money, mortgageInterest, ownableTile, ownerOf, tileName } from "./util";
+import { groupHasBuildings, isInt, log, money, mortgageInterest, ownableTile, ownerOf, tileName, tr } from "./util";
 
-function offerShapeError(o: unknown): string | null {
-    if (!o || typeof o !== "object") return "Malformed trade offer.";
+function offerShapeError(board: BoardDef, o: unknown): string | null {
+    if (!o || typeof o !== "object") return tr(board, "err.tradeMalformed");
     const x = o as Partial<TradeOffer>;
-    if (!isInt(x.cash) || x.cash < 0) return "Trade cash must be a whole, non-negative amount.";
-    if (!isInt(x.jailCards) || x.jailCards < 0) return "Trade jail cards must be a whole, non-negative number.";
-    if (!Array.isArray(x.tiles) || !x.tiles.every(isInt)) return "Malformed trade tiles.";
+    if (!isInt(x.cash) || x.cash < 0) return tr(board, "err.tradeCash");
+    if (!isInt(x.jailCards) || x.jailCards < 0) return tr(board, "err.tradeJailCards");
+    if (!Array.isArray(x.tiles) || !x.tiles.every(isInt)) return tr(board, "err.tradeTiles");
     return null;
 }
 
@@ -25,27 +25,27 @@ function sideError(board: BoardDef, s: GameState, seat: Seat, offer: TradeOffer)
     const p = s.players[seat];
     for (const i of offer.tiles) {
         const t = ownableTile(board, i);
-        if (!t) return `${tileName(board, i)} can't be traded.`;
-        if (ownerOf(s, i)?.owner !== seat) return `${p.name} doesn't own ${t.name}.`;
-        if (groupHasBuildings(board, s, i)) return `Sell the buildings in ${t.name}'s color group before trading it.`;
+        if (!t) return tr(board, "err.cantTrade", { tile: tileName(board, i) });
+        if (ownerOf(s, i)?.owner !== seat) return tr(board, "err.playerNotOwner", { name: p.name, tile: t.name });
+        if (groupHasBuildings(board, s, i)) return tr(board, "err.sellBeforeTrade", { tile: t.name });
     }
-    if (p.cash < offer.cash) return `${p.name} doesn't have ${money(board, offer.cash)}.`;
-    if (jailCardCount(s, seat) < offer.jailCards) return `${p.name} doesn't have that many jail cards.`;
+    if (p.cash < offer.cash) return tr(board, "err.playerNoCash", { name: p.name, amount: money(board, offer.cash) });
+    if (jailCardCount(s, seat) < offer.jailCards) return tr(board, "err.playerNoJailCards", { name: p.name });
     return null;
 }
 
 export function validateTrade(board: BoardDef, s: GameState, from: Seat, to: Seat, give: unknown, get: unknown): string | null {
     const target = s.players[to];
-    if (!isInt(to) || !target) return "No such player.";
-    if (to === from) return "You can't trade with yourself.";
-    if (target.bankrupt) return `${target.name} is bankrupt.`;
-    const shape = offerShapeError(give) ?? offerShapeError(get);
+    if (!isInt(to) || !target) return tr(board, "err.noSuchPlayer");
+    if (to === from) return tr(board, "err.tradeSelf");
+    if (target.bankrupt) return tr(board, "err.playerBankrupt", { name: target.name });
+    const shape = offerShapeError(board, give) ?? offerShapeError(board, get);
     if (shape) return shape;
     const g = give as TradeOffer;
     const r = get as TradeOffer;
     const all = [...g.tiles, ...r.tiles];
-    if (new Set(all).size !== all.length) return "A tile appears twice in the trade.";
-    if (all.length === 0 && g.cash + r.cash + g.jailCards + r.jailCards === 0) return "The trade is empty.";
+    if (new Set(all).size !== all.length) return tr(board, "err.tileTwice");
+    if (all.length === 0 && g.cash + r.cash + g.jailCards + r.jailCards === 0) return tr(board, "err.tradeEmpty");
     return sideError(board, s, from, g) ?? sideError(board, s, to, r);
 }
 
@@ -61,8 +61,8 @@ export function acceptError(board: BoardDef, s: GameState, t: Trade): string | n
     if (err) return err;
     const fromCash = s.players[t.from].cash - t.give.cash + t.get.cash - interestOn(board, s, t.get.tiles);
     const toCash = s.players[t.to].cash - t.get.cash + t.give.cash - interestOn(board, s, t.give.tiles);
-    if (fromCash < 0) return `${s.players[t.from].name} can't cover the mortgage interest on the tiles received.`;
-    if (toCash < 0) return `${s.players[t.to].name} can't cover the mortgage interest on the tiles received.`;
+    if (fromCash < 0) return tr(board, "err.cantCoverInterest", { name: s.players[t.from].name });
+    if (toCash < 0) return tr(board, "err.cantCoverInterest", { name: s.players[t.to].name });
     return null;
 }
 
@@ -91,15 +91,15 @@ export function executeTrade(board: BoardDef, s: GameState, t: Trade): void {
     giveSide(board, s, t.from, t.to, t.give);
     giveSide(board, s, t.to, t.from, t.get);
     s.pendingTrade = null;
-    log(s, `${s.players[t.to].name} accepted ${s.players[t.from].name}'s trade: ${describe(board, s, t)}.`, "good", t.to);
+    log(s, tr(board, "log.tradeAccepted", { name: s.players[t.to].name, other: s.players[t.from].name, trade: describe(board, s, t) }), "good", t.to);
 }
 
 export function describe(board: BoardDef, s: GameState, t: Trade): string {
     const side = (o: TradeOffer) => {
         const parts = o.tiles.map((i) => tileName(board, i));
         if (o.cash > 0) parts.push(money(board, o.cash));
-        if (o.jailCards > 0) parts.push(`${o.jailCards} jail card${o.jailCards > 1 ? "s" : ""}`);
-        return parts.length ? parts.join(", ") : "nothing";
+        if (o.jailCards > 0) parts.push(o.jailCards > 1 ? tr(board, "trade.jailCards", { count: o.jailCards }) : tr(board, "trade.jailCard"));
+        return parts.length ? parts.join(tr(board, "trade.sep")) : tr(board, "trade.nothing");
     };
-    return `${side(t.give)} for ${side(t.get)}`;
+    return tr(board, "trade.for", { give: side(t.give), get: side(t.get) });
 }

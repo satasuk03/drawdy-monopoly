@@ -6,7 +6,7 @@ import { canProposeTrade, checkAction, needsToAct, runAction } from "./actions";
 import { createGame } from "./lobby";
 import { netWorth, rentFor } from "./rent";
 import type { Action, ActionType, Actor, ApplyResult, GameState, Seat, SeatView } from "./types";
-import { clone } from "./util";
+import { clone, tr } from "./util";
 
 export { createGame, needsToAct, netWorth, rentFor };
 
@@ -15,7 +15,7 @@ export function applyAction(board: BoardDef, state: GameState, action: Action, a
     try {
         error = checkAction(board, state, action, actor);
     } catch {
-        error = "Malformed action.";
+        error = tr(board, "err.malformedAction");
     }
     if (error) return { ok: false, error };
     const draft = clone(state);
@@ -67,7 +67,7 @@ export function seatView(board: BoardDef, state: GameState, seat: Seat): SeatVie
     if (view.sellable.length) legal.add("sell-building");
     if (view.mortgageable.length) legal.add("mortgage");
     if (view.unmortgageable.length) legal.add("unmortgage");
-    if (canProposeTrade(state, seat)) legal.add("propose-trade");
+    if (canProposeTrade(board, state, seat)) legal.add("propose-trade");
     const t = state.pendingTrade;
     if (t) {
         for (const type of ["accept-trade", "reject-trade", "cancel-trade"] as const)

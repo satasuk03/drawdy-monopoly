@@ -1,6 +1,7 @@
 // Title-deed style cards (220x300) and the theme picker thumbnail (240x160).
 
 import { formatMoney, type BoardDef } from "../boards/types";
+import { ts } from "../i18n/scene";
 import { BOARD, colorBarRect, tilePlacement } from "../boards/layout";
 import { centerArt } from "./center";
 import { iconBody, iconKey } from "./icons";
@@ -29,6 +30,7 @@ function row(label: string, value: string, y: number, p: BoardDef["palette"], bo
 export function tileCardSvg(board: BoardDef, index: number): string {
     const tile = board.tiles[index];
     const p = board.palette;
+    const lang = board.lang;
     const W = 220;
     const H = 300;
     if (!tile) return head(board, W, H) + `<rect width="${W}" height="${H}" fill="${p.tileFill}"/></svg>`;
@@ -37,22 +39,26 @@ export function tileCardSvg(board: BoardDef, index: number): string {
         const gc = board.groups.find((g) => g.id === tile.group)?.color ?? p.accent;
         const fg = onColor(gc);
         out += `<path d="M1.5 11.5a10 10 0 0110-10H208.5a10 10 0 0110 10V76H1.5z" fill="${gc}" stroke="${p.line}" stroke-width="3"/>`;
-        out += t("TITLE DEED", 110, 18, 9, fg, 700, "middle", ` letter-spacing="2" opacity=".8"`);
+        out += t(ts(lang, "titleDeed"), 110, 18, 9, fg, 700, "middle", ` letter-spacing="2" opacity=".8"`);
         const nm = wrapText(tile.name, 190, 20, 2, { bold: true, minSize: 13 });
         const y0 = nm.lines.length > 1 ? 38 : tile.subtitle ? 46 : 52;
         nm.lines.forEach((l, i) => (out += t(l, 110, y0 + i * nm.size * 1.1, nm.size, fg, 800)));
         if (tile.subtitle) out += t(tile.subtitle, 110, 71, 11, fg, 400, "middle", ` opacity=".85"`);
-        out += t(`Rent ${formatMoney(board, tile.rent[0])}`, 110, 98, 15, p.text, 800);
+        out += t(ts(lang, "rent", { amount: formatMoney(board, tile.rent[0]) }), 110, 98, 15, p.text, 800);
         const hl = board.labels.house;
         const rows: [string, number][] = [
-            [`With 1 ${hl}`, tile.rent[1]], [`With 2 ${hl}s`, tile.rent[2]], [`With 3 ${hl}s`, tile.rent[3]], [`With 4 ${hl}s`, tile.rent[4]], [`With ${board.labels.hotel.toUpperCase()}`, tile.rent[5]],
+            [ts(lang, "withOne", { house: hl }), tile.rent[1]],
+            [ts(lang, "withMany", { n: 2, house: hl }), tile.rent[2]],
+            [ts(lang, "withMany", { n: 3, house: hl }), tile.rent[3]],
+            [ts(lang, "withMany", { n: 4, house: hl }), tile.rent[4]],
+            [ts(lang, "withHotel", { hotel: board.labels.hotel.toUpperCase() }), tile.rent[5]],
         ];
         rows.forEach(([l, v], i) => (out += row(l, formatMoney(board, v), 122 + i * 18, p, i === 4)));
         out += `<path d="M18 218H202" stroke="${p.line}" stroke-width="1" opacity=".4"/>`;
-        out += row(`${hl} cost`, `${formatMoney(board, tile.houseCost)} each`, 238, p);
-        out += row(`${board.labels.hotel} cost`, `${formatMoney(board, tile.houseCost)} + 4 ${hl}s`, 256, p);
-        out += row("Mortgage value", formatMoney(board, Math.floor(tile.price / 2)), 276, p);
-        out += t(`Price ${formatMoney(board, tile.price)}`, 202, 294, 9, p.mutedText, 400, "end").replace(`y="294"`, `y="293"`);
+        out += row(ts(lang, "houseCost", { house: hl }), ts(lang, "each", { amount: formatMoney(board, tile.houseCost) }), 238, p);
+        out += row(ts(lang, "hotelCost", { hotel: board.labels.hotel }), ts(lang, "hotelCostValue", { amount: formatMoney(board, tile.houseCost), house: hl }), 256, p);
+        out += row(ts(lang, "mortgage"), formatMoney(board, Math.floor(tile.price / 2)), 276, p);
+        out += t(ts(lang, "price", { amount: formatMoney(board, tile.price) }), 202, 294, 9, p.mutedText, 400, "end").replace(`y="294"`, `y="293"`);
         return out + "</svg>";
     }
     if (tile.kind === "railroad" || tile.kind === "utility") {
@@ -64,9 +70,9 @@ export function tileCardSvg(board: BoardDef, index: number): string {
         nm.lines.forEach((l, i) => (out += t(l, 110, 98 + i * nm.size * 1.1, nm.size, p.text, 800)));
         const y = 98 + nm.lines.length * nm.size * 1.1 + 12;
         if (rail) {
-            [25, 50, 100, 200].forEach((v, i) => (out += row(i === 0 ? `Rent (1 ${board.labels.railroad})` : `If ${i + 1} ${board.labels.railroad}s owned`, formatMoney(board, v), y + i * 22, p)));
+            [25, 50, 100, 200].forEach((v, i) => (out += row(i === 0 ? ts(lang, "railRentOne", { railroad: board.labels.railroad }) : ts(lang, "railRentMany", { n: i + 1, railroad: board.labels.railroad }), formatMoney(board, v), y + i * 22, p)));
         } else {
-            const ls = [`If one ${board.labels.utility} is owned, rent is 4 times the dice roll.`, `If both are owned, rent is 10 times the dice roll.`];
+            const ls = [ts(lang, "utilityOne", { utility: board.labels.utility }), ts(lang, "utilityBoth")];
             let yy = y;
             for (const s of ls) {
                 const w = wrapText(s, 184, 12, 3);
@@ -75,20 +81,20 @@ export function tileCardSvg(board: BoardDef, index: number): string {
             }
         }
         out += `<path d="M18 252H202" stroke="${p.line}" stroke-width="1" opacity=".4"/>`;
-        out += row("Mortgage value", formatMoney(board, Math.floor(tile.price / 2)), 274, p);
-        out += t(`Price ${formatMoney(board, tile.price)}`, 202, 293, 9, p.mutedText, 400, "end");
+        out += row(ts(lang, "mortgage"), formatMoney(board, Math.floor(tile.price / 2)), 274, p);
+        out += t(ts(lang, "price", { amount: formatMoney(board, tile.price) }), 202, 293, 9, p.mutedText, 400, "end");
         return out + "</svg>";
     }
     // Everything else: a simple icon card.
     const hue = tile.kind === "chest" ? p.accent2 : p.accent;
     const sub: Record<string, string> = {
-        go: `Collect ${formatMoney(board, 200)} salary as you pass.`,
-        tax: tile.kind === "tax" ? `Pay ${formatMoney(board, tile.amount)} to the bank.` : "",
-        chance: `Draw a ${board.labels.chance} card.`,
-        chest: `Draw a ${board.labels.chest} card.`,
-        jail: `Just visiting, unless you are in ${board.labels.jail}.`,
-        "free-parking": "A free place to rest. Nothing happens.",
-        "go-to-jail": `Go directly to ${board.labels.jail}. Do not pass GO.`,
+        go: ts(lang, "goCard", { amount: formatMoney(board, 200) }),
+        tax: tile.kind === "tax" ? ts(lang, "taxCard", { amount: formatMoney(board, tile.amount) }) : "",
+        chance: ts(lang, "deckCard", { deck: board.labels.chance }),
+        chest: ts(lang, "deckCard", { deck: board.labels.chest }),
+        jail: ts(lang, "jailCard", { jail: board.labels.jail }),
+        "free-parking": ts(lang, "parkingCard"),
+        "go-to-jail": ts(lang, "goToJailCard", { jail: board.labels.jail }),
     };
     out += `<circle cx="110" cy="104" r="62" fill="${hue}" opacity=".18"/><circle cx="110" cy="104" r="62" fill="none" stroke="${hue}" stroke-width="3"/>`;
     out += icon(tile.icon ?? defaultIcon(tile.kind), 66, 60, 88, hue);
@@ -138,7 +144,7 @@ export function boardPreviewSvg(board: BoardDef): string {
         `<g transform="translate(${bx} ${by}) scale(${S.toFixed(5)})">` +
         `<g transform="translate(160 160)">${art.body.replace(/url\(#(\w+)\)/g, "url(#p-$1)")}</g>${tiles}</g>` +
         title.lines.map((l, i) => t(l, 200, 30 + i * 19, title.size, p.text, 800)).join("") +
-        t(`${board.tokens.length} tokens`, 200, 100, 10, p.mutedText) +
+        t(ts(board.lang, "tokens", { n: board.tokens.length }), 200, 100, 10, p.mutedText) +
         tok +
         `</svg>`
     );
