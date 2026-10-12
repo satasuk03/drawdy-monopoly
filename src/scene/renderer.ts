@@ -271,9 +271,10 @@ export class SceneRenderer {
         const holdBack = (s: ElementSpec) => from !== null && s.role === "score";
         const added = await this.add(specs.filter((s) => !this.cache.has(s.id) && !holdBack(s)));
 
-        // Rings whose token moves pop in where it lands, with the move batch below.
+        // Rings whose token moves pop in where it lands, and name tags ride along, with the move batch below.
         const ringsLater = specs.filter((s) => s.role === "turn-ring" && s.seat !== undefined && landOf.has(s.seat));
-        const inMoveBatch = new Set([...moves.keys(), ...ringsLater.map((s) => s.id)]);
+        const tagsAlong = specs.filter((s) => s.role === "name-tag" && s.seat !== undefined && landOf.has(s.seat));
+        const inMoveBatch = new Set([...moves.keys(), ...ringsLater.map((s) => s.id), ...tagsAlong.map((s) => s.id)]);
 
         // 4. Update what changed (including existing ids an add bumped into),
         // lock new elements, and bring new or changed pieces in with a flourish.
@@ -312,7 +313,7 @@ export class SceneRenderer {
 
         // 6. The action: moves, landing bursts, money, departures, confetti — one batch, timed by baked delays.
         let busy = 0;
-        if (from) busy = await this.playAction(from, next, origin, desired, moves, ringsLater, landOf, staleLate, added);
+        if (from) busy = await this.playAction(from, next, origin, desired, moves, ringsLater, tagsAlong, landOf, staleLate, added);
 
         // 7. When it's over: swap the scoreboard text.
         if (from) {
@@ -371,7 +372,7 @@ export class SceneRenderer {
             then = { localAnimation: turnRingPulse() };
         } else if (isNew && s.role === "building") {
             anim = buildingDrop(s.slot ?? 0, s.id.includes(`${SEP}hotel${SEP}`));
-        } else if (isNew && s.role === "token") {
+        } else if (isNew && (s.role === "token" || s.role === "name-tag")) {
             anim = tokenDrop(s.seat !== undefined ? s.seat * 80 : 0);
         } else if (isNew && s.role === "chip" && s.tile !== undefined) {
             const a = from.ownership[String(s.tile)];
@@ -410,6 +411,7 @@ export class SceneRenderer {
         desired: Map<string, ElementSpec>,
         moves: Map<string, PlannedMove>,
         ringsLater: ElementSpec[],
+        tagsAlong: ElementSpec[],
         landOf: Map<number, number>,
         staleLate: string[],
         added: Set<string>
@@ -429,6 +431,21 @@ export class SceneRenderer {
                 const r = turnRingRect(m.rect);
                 fx.push({ schema: this.fxImage(r, svgDataUrl(turnRingSvg(m.color))), anim: shockwave(m.move.landMs), lifeMs: shockwaveMs(m.move.landMs) });
             }
+        }
+        // A name tag follows its token's path (x/y only: it doesn't squash, lean
+        // or spin). A tag that was just replaced (the tile got more or less
+        // crowded, so its text changed) pops in when the token lands instead.
+        for (const tag of tagsAlong) {
+            const m = [...moves.values()].find((mv) => mv.seat === tag.seat);
+            if (!m) continue;
+            const { x, y } = m.move.anim.animation.transform;
+            const anim: LocalAnimation = added.has(tag.id)
+                ? ringPop(m.move.landMs)
+                : { time: m.move.anim.time, animation: { transform: { ...(x ? { x } : {}), ...(y ? { y } : {}) }, curve: m.move.anim.animation.curve } };
+            const props: LiveProps = { ...tag.props, localAnimation: anim };
+            if (added.has(tag.id) || this.cache.get(tag.id) === UNKNOWN) props.locked = true;
+            batch.push({ drawdyElementId: tag.id, properties: props });
+            this.after(tag.id, anim.time.durationMs + 300, { localAnimation: null });
         }
         for (const ring of ringsLater) {
             const props: LiveProps = { ...ring.props, localAnimation: ringPop(landOf.get(ring.seat!) ?? 0) };
@@ -525,7 +542,7 @@ export class SceneRenderer {
             const s = desired.get(id);
             if (s) this.cache.set(id, propsKey(s.props));
         }
-        for (const s of ringsLater) this.cache.set(s.id, propsKey(s.props));
+        for (const s of [...ringsLater, ...tagsAlong]) this.cache.set(s.id, propsKey(s.props));
         return busy;
     }
 

@@ -2,6 +2,8 @@
 // their token. 100x100 viewBox; the ring stays inside 8 units of the edge so
 // the glow isn't clipped.
 
+import { escapeXml, fontAttr, n1, textEm } from "./util";
+
 export function turnRingSvg(color: string): string {
     return (
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">` +
@@ -49,6 +51,48 @@ export function ownerBadgeSvg(color: string, mortgaged: boolean, width: number, 
         `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="${r - 1}" fill="${color}" stroke="#1d1a24" stroke-width="2"${mortgaged ? ` fill-opacity=".55" stroke-dasharray="5 3"` : ""}/>` +
         (mortgaged ? `<rect x="3" y="3" width="${w - 6}" height="${h - 6}" rx="${r - 3}" fill="url(#m)"/>` : shine) +
         `<rect x="3" y="3" width="${w - 6}" height="${h - 6}" rx="${r - 3}" fill="none" stroke="#fff" stroke-width="1.5" opacity=".85"/>` +
+        `</svg>`
+    );
+}
+
+/** Name tags are this tall; their width follows the name. */
+export const NAME_TAG_H = 24;
+const NAME_TAG_FONT = 14;
+const NAME_TAG_MAX = 12; // characters before the name is cut with an ellipsis
+
+/**
+ * A name, shortened to fit on a tag. On a crowded tile (`crowd` tokens) the
+ * tags would pile up, so 3 sharing get short names and 4+ just an initial.
+ */
+export function nameTagText(name: string, crowd = 1): string {
+    const chars = [...name.trim()];
+    if (crowd >= 4) return (chars[0] ?? "?").toUpperCase();
+    const max = crowd === 3 ? 6 : NAME_TAG_MAX;
+    return chars.length > max ? chars.slice(0, max - 1).join("") + "…" : chars.join("");
+}
+
+/** Width of the tag for `text` (already shortened). */
+export function nameTagWidth(text: string): number {
+    return Math.round(textEm(text, true) * NAME_TAG_FONT + 18);
+}
+
+/** Dark ink on light player colors (yellow, lime), white on the rest. */
+function inkOn(hex: string): string {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return "#fff";
+    const v = parseInt(m[1]!, 16);
+    const lum = 0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255);
+    return lum > 170 ? "#1d1d1f" : "#fff";
+}
+
+/** A pill in the player's color with their name on it, a white edge so it reads on any tile. */
+export function nameTagSvg(text: string, color: string, fontFamily: string): string {
+    const w = nameTagWidth(text);
+    const h = NAME_TAG_H;
+    return (
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
+        `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="${(h - 2) / 2}" fill="${color}" stroke="#fff" stroke-width="2"/>` +
+        `<text x="${n1(w / 2)}" y="${n1(h / 2 + NAME_TAG_FONT * 0.36)}" text-anchor="middle" font-family="${fontAttr(fontFamily)}" font-size="${NAME_TAG_FONT}" font-weight="700" fill="${inkOn(color)}">${escapeXml(text)}</text>` +
         `</svg>`
     );
 }

@@ -16,7 +16,7 @@ import type {
     LocalAnimation,
     UpdateableProperties,
 } from "@drawdy/driver-protocol";
-import { boardSvg, diceFaceSvg, diceShadowSvg, hotelSvg, houseSvg, ownerBadgeSvg, svgDataUrl, tokenSvg, turnRingSvg } from "../art/index";
+import { boardSvg, diceFaceSvg, diceShadowSvg, hotelSvg, houseSvg, NAME_TAG_H, nameTagSvg, nameTagText, nameTagWidth, ownerBadgeSvg, svgDataUrl, tokenSvg, turnRingSvg } from "../art/index";
 import { formatMoney, type BoardDef } from "../boards/types";
 import { ts } from "../i18n/scene";
 import {
@@ -60,7 +60,7 @@ function offset(r: Rect, o: Point): Rect {
     return { x: r.x + o.x, y: r.y + o.y, width: r.width, height: r.height };
 }
 
-export type SpecRole = "board" | "chip" | "building" | "token" | "turn-ring" | "die-shadow" | "die" | "panel" | "score";
+export type SpecRole = "board" | "chip" | "building" | "token" | "name-tag" | "turn-ring" | "die-shadow" | "die" | "panel" | "score";
 
 /** Live properties: what update-drawdy-elements accepts (width/height resize components, absent from older typings). */
 export type LiveProps = UpdateableProperties & { width?: number; height?: number };
@@ -73,7 +73,7 @@ export type ElementSpec = {
     schema: DrawdyElementSchema;
     /** Live properties enforced on every pass (style / position). Compared by JSON to skip no-op updates. */
     props: LiveProps;
-    /** For tokens and the turn ring: the seat, so moves can be animated. */
+    /** For tokens, their name tags and the turn ring: the seat, so moves can be animated. */
     seat?: number;
     /** For dice and their shadows: which die (0 or 1), so each gets its own throw. */
     die?: 0 | 1;
@@ -203,6 +203,16 @@ export function turnRingId(gameId: string, p: Player): string {
     return sceneElementId(gameId, "ring", p.seat, shortHash(p.color));
 }
 
+export function nameTagId(gameId: string, p: Player, text: string): string {
+    return sceneElementId(gameId, "tag", p.seat, shortHash(`${text}|${p.color}`));
+}
+
+/** A name tag sits centered just above its token. */
+export function nameTagRect(token: Rect, text: string): Rect {
+    const w = nameTagWidth(text);
+    return { x: Math.round((token.x + (token.width - w) / 2) * 10) / 10, y: token.y - NAME_TAG_H + 4, width: w, height: NAME_TAG_H };
+}
+
 /** The ring is a bit larger than the token and centered on it. */
 export function turnRingRect(token: Rect): Rect {
     const size = Math.round(token.width * 1.4 * 10) / 10;
@@ -306,6 +316,24 @@ export function desiredScene(board: BoardDef, state: GameState, origin: Point): 
             seat: cur.seat,
             schema: imageComponent(id, frameId, r, svgDataUrl(turnRingSvg(cur.color))),
             props: { transform: { x: r.x, y: r.y }, width: r.width, height: r.height },
+        });
+    }
+
+    // Name tags above the tokens, on top of the ring. Content-addressed by
+    // name and color (text can't change in place); position is updated.
+    for (const p of state.players) {
+        const s = slots.get(p.seat);
+        if (!s) continue;
+        const text = nameTagText(p.name || ts(board.lang, "player", { n: p.seat + 1 }), s.count);
+        const id = nameTagId(gameId, p, text);
+        const r = nameTagRect(offset(tokenRect(s.tile, s.slot, s.jailed, s.count), origin), text);
+        specs.push({
+            id,
+            role: "name-tag",
+            seat: p.seat,
+            // Created invisible like the owner chips: the renderer reveals it, after the token lands when it moves.
+            schema: { ...imageComponent(id, frameId, r, svgDataUrl(nameTagSvg(text, p.color, board.fontFamily))), opacity: 0 },
+            props: { transform: { x: r.x, y: r.y }, opacity: 1 },
         });
     }
 

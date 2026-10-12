@@ -10,3 +10,4 @@
 - Buy, auction, build, sell, mortgage, trade, jail options, debt and bankruptcy.
 - Control panel with a game list, new-game form, lobby, in-game tabs (Assets, Players, Trade, Log, Rules).
 - Board, tokens, dice, houses and scoreboard drawn on the canvas.
+- Name tags above every token that hop along with it (initials only when a tile is crowded).

@@ -104,7 +104,7 @@ test("driver: create a game, hot-seat join, start, roll — scene and view stay 
     const mod = await import("../src/index");
     host.onEvent = mod.onEvent;
     await mod.activate({
-        issueCommand: host.issue as any,
+        issueCommand: ((r: any) => host.issue(r)) as any,
         manifest: { driverId: "satasuk.board-tycoon", driverName: "x", driverVersion: "0", main: "main.js", permissions: [] },
         styling: { theme: "dark", tokens: { "--dd-accent": "#f00" } } as any,
         generateId: (() => {
@@ -145,6 +145,13 @@ test("driver: create a game, hot-seat join, start, roll — scene and view stay 
     const tokens = () => [...host.els.values()].filter((e) => e.id.includes(":tok:"));
     assert.equal(tokens().length, 2);
 
+    const tagAnims = new Set<string>();
+    const issue = host.issue;
+    host.issue = async (r) => {
+        if (r.type === "command:scene:update-drawdy-elements")
+            for (const u of r.req.updates) if (u.drawdyElementId.includes(":tag:") && u.properties.localAnimation?.animation.transform.x) tagAnims.add(u.drawdyElementId);
+        return issue(r);
+    };
     await act({ type: "roll", seat: 0 });
     await wait(2800); // dice throw + hop animation
     view = host.lastView();
@@ -162,6 +169,13 @@ test("driver: create a game, hot-seat join, start, roll — scene and view stay 
     const want = tokenPosition({ x: (frame.x as number) + PAD, y: (frame.y as number) + PAD }, slot.tile, slot.slot, slot.jailed, slot.count);
     const t0 = tokens().find((e) => e.id.includes(":tok:0:"))!;
     assert.deepEqual({ x: t0.x, y: t0.y }, want);
+    // Its name tag sits just above it, visible, and hopped along with it.
+    const tags = [...host.els.values()].filter((e) => e.id.includes(":tag:"));
+    assert.equal(tags.length, 2, "one name tag per player");
+    const tag0 = tags.find((e) => e.id.includes(":tag:0:"))!;
+    assert.equal(tag0.opacity, 1);
+    assert.ok((tag0.y as number) < want.y && (tag0.y as number) > want.y - 30, "tag above the token");
+    assert.ok(tagAnims.has(tag0.id), "tag got the hop animation");
 
     // An engine rejection for my own direct action is reported.
     const before = host.posted.length;
