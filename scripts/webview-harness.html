@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Board Tycoon webview harness</title>
+<style>
+  html, body { margin: 0; height: 100%; font: 12px system-ui; background: #888; }
+  #wrap { display: flex; height: 100%; }
+  iframe { border: 0; width: 360px; flex: none; height: 100%; background: #fff; }
+  #ctl { flex: 1; padding: 8px; background: #eee; overflow: auto; }
+  #ctl button { margin: 2px; }
+  pre { font-size: 10px; white-space: pre-wrap; }
+  body.bare #ctl { display: none; }
+  body.bare iframe { width: 360px; }
+</style>
+</head>
+<body>
+<div id="wrap"><iframe id="f"></iframe><div id="ctl"><div id="btns"></div><pre id="out"></pre></div></div>
+<script src="webview-html.js"></script>
+<script src="webview-fixtures.js"></script>
+<script>
+// Usage: webview-harness.html?s=game&theme=dark&click=[data-tab=assets],[data-k="b:Roll"]  (comma-separated selectors, clicked in order)
+const q = new URLSearchParams(location.search);
+const F = window.TYCOON_FIX;
+let theme = q.get("theme") || "light";
+if (q.has("s")) document.body.classList.add("bare");
+const frame = document.getElementById("f");
+const out = document.getElementById("out");
+const fake = `<script>
+window.acquireDrawdyApi = function () {
+  return {
+    postMessage: function (m) { parent.postMessage({ fromPanel: m }, "*"); },
+    onMessage: function (l) { window.addEventListener("message", function (e) { if (e.data && e.data.toPanel) l(e.data.toPanel); }); return function () {}; }
+  };
+};
+window.addEventListener("message", function (e) {
+  if (e.data && e.data.click) { var el = document.querySelector(e.data.click); if (el) el.click(); else console.log("no match " + e.data.click); }
+  if (e.data && e.data.fill) { var i = document.querySelector(e.data.fill[0]); if (i) { i.value = e.data.fill[1]; i.dispatchEvent(new Event("input", {bubbles:true})); i.dispatchEvent(new Event("change", {bubbles:true})); } }
+});
+<\/script>`;
+let scenario = q.get("s") || "game";
+function toPanel(m) { frame.contentWindow.postMessage({ toPanel: m }, "*"); }
+function play(name) {
+  scenario = name;
+  toPanel(F.init(theme));
+  F.scenarios[name]().forEach(toPanel);
+}
+window.addEventListener("message", (e) => {
+  if (!e.data || !e.data.fromPanel) return;
+  const m = e.data.fromPanel;
+  out.textContent = JSON.stringify(m) + "\n" + out.textContent.slice(0, 3000);
+  if (m.type === "ready") {
+    play(scenario);
+    const clicks = (q.get("click") || "").split("||").filter(Boolean);
+    clicks.forEach((c, i) => setTimeout(() => frame.contentWindow.postMessage({ click: c }, "*"), 50 + i * 50));
+    if (q.get("fill")) { const [sel, val] = q.get("fill").split("=>"); setTimeout(() => frame.contentWindow.postMessage({ fill: [sel, val] }, "*"), 400); }
+  }
+});
+const btns = document.getElementById("btns");
+Object.keys(F.scenarios).forEach((n) => { const b = document.createElement("button"); b.textContent = n; b.onclick = () => play(n); btns.appendChild(b); });
+const tb = document.createElement("button"); tb.textContent = "toggle theme"; tb.onclick = () => { theme = theme === "dark" ? "light" : "dark"; play(scenario); }; btns.appendChild(tb);
+frame.srcdoc = window.WEBVIEW_HTML.replace("<head>", "<head>" + fake);
+</script>
+</body>
+</html>

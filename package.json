@@ -1,0 +1,26 @@
+{
+    "name": "board-tycoon",
+    "version": "0.1.0",
+    "description": "Board Tycoon: a 2-6 player property-trading board game for Drawdy.",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "node build.ts",
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/*.test.ts",
+        "webview": "node scripts/build-webview.mjs"
+    },
+    "devDependencies": {
+        "@types/node": "^20",
+        "typescript": "^5",
+        "vite": "^8.2.1",
+        "@drawdy/driver-protocol": "latest",
+        "@rollup/plugin-typescript": "^12.1.2",
+        "fflate": "^0.8.2",
+        "rollup": "^4.34.0",
+        "tslib": "^2.8.1",
+        "tsx": "^4.19.0"
+    }
+}
