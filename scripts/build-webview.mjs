@@ -1,7 +1,7 @@
 // Inlines webview/styles.css and webview/i18n.js + webview/app.js into webview/index.html and
 // writes src/ui/webview-html.ts (plus scripts/webview-html.js for the harness).
 // Usage: node scripts/build-webview.mjs   (npm run webview)
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,7 +10,12 @@ const read = (p) => readFileSync(join(root, p), "utf8");
 
 const css = read("webview/styles.css");
 // i18n.js and sfx.js define BT_I18N and BT_SFX, which app.js reads.
-const js = read("webview/i18n.js") + "\n" + read("webview/sfx.js") + "\n" + read("webview/app.js");
+// Voice clips are inlined as base64 into BT_VOICES, which sfx.js reads.
+const voices = readdirSync(join(root, "webview/voices"))
+    .filter((f) => f.endsWith(".mp3"))
+    .sort()
+    .map((f) => readFileSync(join(root, "webview/voices", f)).toString("base64"));
+const js = `const BT_VOICES = ${JSON.stringify(voices)};\n` + read("webview/i18n.js") + "\n" + read("webview/sfx.js") + "\n" + read("webview/app.js");
 // Function replacers: avoid "$&"-style patterns in the inlined text being interpreted.
 const html = read("webview/index.html")
     .replace("/*__STYLES__*/", () => css)

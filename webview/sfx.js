@@ -1,4 +1,4 @@
-// Board Tycoon sound effects. Synthesized with Web Audio: no audio files, nothing to download.
+// Board Tycoon sound effects. Synthesized with Web Audio, plus a few tiny voice clips inlined as base64 (BT_VOICES).
 // Defines BT_SFX, which app.js reads. Browsers only allow sound after the user interacts with
 // the page, so the audio context starts on the first click or key press in the panel; until
 // then every sound is silently skipped.
@@ -84,6 +84,33 @@ const BT_SFX = (function () {
         freqs.forEach((f, i) => tone(f, i * step + ((o && o.at) || 0), dur, o));
     }
 
+    // Spoken "build a land" clips (inlined base64 mp3s in BT_VOICES). Decoded on first use; one
+    // picked at random per purchase, never the same twice in a row.
+    let voiceBufs = null;
+    let lastVoice = -1;
+    function voice(at) {
+        if (typeof BT_VOICES === "undefined" || !BT_VOICES.length) return;
+        if (!voiceBufs) {
+            voiceBufs = BT_VOICES.map((b64) => {
+                const bin = atob(b64);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return ctx.decodeAudioData(bytes.buffer).catch(() => null);
+            });
+        }
+        let i = Math.floor(Math.random() * voiceBufs.length);
+        if (i === lastVoice) i = (i + 1) % voiceBufs.length;
+        lastVoice = i;
+        const t0 = ctx.currentTime + at;
+        voiceBufs[i].then((buf) => {
+            if (!buf) return;
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(out);
+            src.start(Math.max(t0, ctx.currentTime));
+        });
+    }
+
     // ------------------------------------------------------------ sounds
     const SOUNDS = {
         /** Dice shaking in the hand while the roll is on its way. */
@@ -116,6 +143,7 @@ const BT_SFX = (function () {
             tone(140, 0.2, 0.18, { gain: 0.6, to: 50 });
             noise(0.2, 0.08, { filter: "lowpass", freq: 900, gain: 0.4 });
             notes([784, 1175], 0.07, 0.3, { at: 0.32, gain: 0.12, type: "triangle" });
+            voice(0.45);
         },
         build() {
             tone(320, 0, 0.08, { type: "triangle", gain: 0.4 });
