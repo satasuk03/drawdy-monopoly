@@ -9,8 +9,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(join(root, p), "utf8");
 
 const css = read("webview/styles.css");
-// i18n.js defines BT_I18N, which app.js reads.
-const js = read("webview/i18n.js") + "\n" + read("webview/app.js");
+// i18n.js and sfx.js define BT_I18N and BT_SFX, which app.js reads.
+const js = read("webview/i18n.js") + "\n" + read("webview/sfx.js") + "\n" + read("webview/app.js");
 // Function replacers: avoid "$&"-style patterns in the inlined text being interpreted.
 const html = read("webview/index.html")
     .replace("/*__STYLES__*/", () => css)

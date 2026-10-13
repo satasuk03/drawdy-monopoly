@@ -17,6 +17,8 @@ Play a Monopoly-style property-trading game with 2–6 friends, right on your Dr
 
 Tip: press **Space** or **Enter** to do the main action, like rolling the dice.
 
+The panel plays sound effects for dice, money, buying, building, cards and more. Click the speaker button at the top of the panel to turn them off. Your browser starts the sound after your first click in the panel.
+
 ## What you can do on your turn
 
 - **Roll** the dice and move.

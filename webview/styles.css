@@ -57,12 +57,15 @@ p { margin: 0; }
 .section-title.tight { margin: var(--s2) 0 4px; }
 .empty { color: var(--tx3); text-align: center; padding: var(--s3); }
 .hero { padding: var(--s2) 2px; }
-/* Panel language picker: floats top-right so it costs no height. */
+/* Panel sound toggle and language picker: float top-right so they cost no height. */
 #root { position: relative; }
-.langbar { position: absolute; top: var(--s2); right: var(--s2); z-index: 2; }
+.langbar { position: absolute; top: var(--s2); right: var(--s2); z-index: 2; display: flex; align-items: center; gap: 2px; }
 .langsel { width: auto; padding: 2px 4px; font-size: 11px; color: var(--tx2); background: transparent; border-color: transparent; cursor: pointer; }
 .langsel:hover { border-color: var(--bd); }
-.screen > .topbar, .screen > .ghead > .topbar, .screen > .hero { padding-right: 52px; }
+.soundbtn { display: flex; padding: 4px; color: var(--tx2); background: transparent; border: 1px solid transparent; border-radius: var(--r); cursor: pointer; }
+.soundbtn:hover { border-color: var(--bd); }
+.soundbtn[aria-pressed="false"] { color: var(--tx3); }
+.screen > .topbar, .screen > .ghead > .topbar, .screen > .hero { padding-right: 80px; }
 .hero p { color: var(--tx2); }
 
 .card { background: var(--sec); border: 1px solid var(--bd); border-radius: var(--r); padding: var(--s2) var(--s3); display: flex; flex-direction: column; gap: var(--s2); }

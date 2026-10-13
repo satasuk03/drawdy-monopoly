@@ -9,6 +9,7 @@
     const t = L.t;
     const tn = L.tn;
     const tx = L.tx;
+    const sfx = BT_SFX;
 
     // ---------------------------------------------------------------- state
     const S = {
@@ -511,6 +512,73 @@
                 ], { duration: 900, easing: "ease-out" });
     }
 
+    /** Same diff as viewFx, for sounds. Each sound plays at most once per update, staggered after the dice land. */
+    function viewSfx(prev, v) {
+        if (!prev || prev.state.gameId !== v.state.gameId) return;
+        const a = prev.state;
+        const b = v.state;
+        const ap = a.phase;
+        const bp = b.phase;
+        const rolled = rollId(b) !== rollId(a) && b.dice;
+        const later = rolled ? 700 : 0;
+        const play = (name, at) => sfx.play(name, later + (at || 0));
+
+        if (rolled) {
+            sfx.play("dice");
+            if (b.dice[0] === b.dice[1]) sfx.play("doubles");
+        }
+        if (bp.kind === "game-over") {
+            if (ap.kind !== "game-over") play("win");
+            return;
+        }
+
+        const lastLog = a.log.reduce((m, e) => Math.max(m, e.id), -1);
+        if (b.log.some((e) => e.id > lastLog && e.tone === "card")) play("card");
+
+        let jailed = false;
+        let broke = false;
+        let mine = 0;
+        let others = false;
+        for (const p of b.players) {
+            const o = a.players[p.seat];
+            if (!o) continue;
+            if (p.inJail && !o.inJail) jailed = true;
+            if (p.bankrupt && !o.bankrupt) broke = true;
+            if (o.cash !== p.cash) {
+                if (isMine(p.seat)) mine += p.cash - o.cash;
+                else others = true;
+            }
+        }
+        if (broke) play("bankrupt", 200);
+        else if (jailed) play("jail", 200);
+        else if (bp.kind === "debt" && isMine(bp.debt.debtor) && !(ap.kind === "debt" && ap.debt.debtor === bp.debt.debtor)) play("debt", 200);
+
+        let bought = false;
+        let built = 0;
+        for (const k of Object.keys(b.ownership)) {
+            const now = b.ownership[k];
+            const was = a.ownership[k];
+            if (!was) bought = true;
+            else built += now.houses - was.houses;
+        }
+        for (const k of Object.keys(a.ownership)) if (!b.ownership[k]) built -= a.ownership[k].houses;
+        // A bankruptcy hands over or clears a whole estate: its own sound covers that.
+        if (!broke) {
+            if (bought) play("buy");
+            else if (built > 0) play("build");
+            else if (built < 0) play("sell");
+        }
+
+        if (mine > 0) play("coinIn", 300);
+        else if (mine < 0) play("coinOut", 300);
+        else if (others) play("coin", 300);
+
+        if (bp.kind === "auction" && deedKey(bp) !== deedKey(ap)) play("auction", 200);
+        const tr = b.pendingTrade;
+        if (tr && isMine(tr.to) && !(a.pendingTrade && a.pendingTrade.id === tr.id)) play("trade");
+        if (a.current !== b.current && isMine(b.current) && v.mySeats.length < b.players.length) play("myTurn", 600);
+    }
+
     // ---------------------------------------------------------- UI pieces
     function chip(p, size) {
         const c = h("span", { class: "chip " + (size || ""), style: "--pc:" + safeColor(p.color) });
@@ -552,7 +620,10 @@
     }
     function primary(label, action, enabled, sub) {
         const run = () => {
-            if (action.type === "roll") startRolling();
+            if (action.type === "roll") {
+                sfx.play("shake");
+                startRolling();
+            }
             act(action);
         };
         const live = enabled !== false && !(S.view && S.view.pending);
@@ -1508,11 +1579,34 @@
         }
     }
 
-    /** The panel's own language (each user's choice, separate from the game's). */
+    // Speaker glyphs for the sound toggle, 16×16, drawn in currentColor.
+    const SPEAKER = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h2.5L8 3v10L4.5 10H2z" fill="currentColor"/>';
+    const SOUND_ON = SPEAKER + '<path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9"/></svg>';
+    const SOUND_OFF = SPEAKER + '<path d="M11 6l4 4M15 6l-4 4"/></svg>';
+
+    /** The panel's own language (each user's choice, separate from the game's) and sound toggle. */
     function langBar() {
         return h(
             "div",
             { class: "langbar" },
+            sfx.supported
+                ? h(
+                      "button",
+                      {
+                          type: "button",
+                          class: "soundbtn",
+                          "data-k": "s:sound",
+                          "aria-pressed": sfx.on ? "true" : "false",
+                          "aria-label": t("sound"),
+                          title: sfx.on ? t("soundOn") : t("soundOff"),
+                          onclick: () => {
+                              sfx.setOn(!sfx.on);
+                              render();
+                          },
+                      },
+                      svgBox(sfx.on ? SOUND_ON : SOUND_OFF)
+                  )
+                : null,
             h(
                 "select",
                 { class: "langsel", "data-k": "s:uiLang", "aria-label": t("language"), title: t("language"), onchange: (e) => setUiLang(e.target.value) },
@@ -1633,11 +1727,13 @@
                     }
                     pushToasts(v);
                     viewFx(prev, v);
+                    viewSfx(prev, v);
                 }
                 break;
             }
             case "error":
                 stopRolling();
+                sfx.play("error");
                 showError(String(msg.message));
                 return;
         }

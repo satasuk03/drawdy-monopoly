@@ -117,7 +117,7 @@ All SVG is hand-written strings, deterministic, system fonts only (`board.fontFa
 
 ## Webview (`webview/` → `src/ui/webview-html.ts`)
 
-Plain HTML/CSS/JS control panel, ~360 px wide, uses `--dd-*` tokens. Talks to the driver only through `src/ui/messages.ts`. Screens: games list / new game (theme picker + house rules) → lobby (join with name/color/token, "add local player" for hot-seat, creator starts) → game (turn banner, dice, contextual primary action, tabs: Assets, Players, Trade, Log, Rules). The panel is a view: all rules live in the engine; the panel enables buttons from `SeatView.legal`.
+Plain HTML/CSS/JS control panel, ~360 px wide, uses `--dd-*` tokens. Sound effects (`webview/sfx.js`, `BT_SFX`) are synthesized with Web Audio (no audio files); `viewSfx` in `app.js` picks them from the same state diff as the visual `viewFx`. The driver's worker has no audio, so sounds play only in each user's panel. The mute choice is saved in the panel's `localStorage`. Talks to the driver only through `src/ui/messages.ts`. Screens: games list / new game (theme picker + house rules) → lobby (join with name/color/token, "add local player" for hot-seat, creator starts) → game (turn banner, dice, contextual primary action, tabs: Assets, Players, Trade, Log, Rules). The panel is a view: all rules live in the engine; the panel enables buttons from `SeatView.legal`.
 
 ## Commands
 
