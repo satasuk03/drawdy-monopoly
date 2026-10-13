@@ -399,8 +399,10 @@ export class SceneRenderer {
 
     /**
      * Steps 6: one update batch that sets every moving token to its final rect
-     * with its baked hop/leap, pops rings where tokens land, bursts shockwaves,
-     * flies coins and poofs departing tokens. Transient effect elements are
+     * with its baked hop/leap (FLIP: the element is already where it ends up,
+     * the keyframes play the way there from where it was; they stay attached
+     * until the next move swaps them), pops rings where tokens land, bursts
+     * shockwaves, flies coins and poofs departing tokens. Transient effect elements are
      * added hidden first and removed when done. Returns how long to wait
      * before the scoreboard may change (the money has arrived).
      */
@@ -425,7 +427,6 @@ export class SceneRenderer {
             const props: LiveProps = { ...s.props, localAnimation: m.move.anim };
             if (this.cache.get(id) === UNKNOWN) props.locked = true;
             batch.push({ drawdyElementId: id, properties: props });
-            this.after(id, m.move.durationMs + 300, { localAnimation: null });
             busy = Math.max(busy, m.move.landMs);
             if (m.big) {
                 const r = turnRingRect(m.rect);
@@ -445,7 +446,6 @@ export class SceneRenderer {
             const props: LiveProps = { ...tag.props, localAnimation: anim };
             if (added.has(tag.id) || this.cache.get(tag.id) === UNKNOWN) props.locked = true;
             batch.push({ drawdyElementId: tag.id, properties: props });
-            this.after(tag.id, anim.time.durationMs + 300, { localAnimation: null });
         }
         for (const ring of ringsLater) {
             const props: LiveProps = { ...ring.props, localAnimation: ringPop(landOf.get(ring.seat!) ?? 0) };
