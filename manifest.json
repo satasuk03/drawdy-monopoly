@@ -1,7 +1,7 @@
 {
     "driverId": "satasuk.board-tycoon",
     "driverName": "Board Tycoon",
-    "driverVersion": "0.2.0",
+    "driverVersion": "0.2.1",
     "description": "Play a 2-6 player property-trading board game right on your Drawdy board. Pick a theme (Classic, Thailand, Space, Fantasy), roll, buy, build, trade and bankrupt your friends - together on a cloud board or hot-seat on one screen.",
     "main": "main.js",
     "icon": "icon.svg",
