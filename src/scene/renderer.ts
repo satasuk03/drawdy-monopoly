@@ -17,7 +17,7 @@
 //    `body.existingIds`, update those instead and add the rest.
 
 import type { DrawdyElementSchema, LocalAnimation, UpdateableProperties } from "@drawdy/driver-protocol";
-import { cmd, isDdError, logError, sleep } from "../dd";
+import { cmd, isDdError, logError, sleep, tryCmd } from "../dd";
 import type { BoardDef } from "../boards/types";
 import type { GameState } from "../engine/types";
 import { CENTER, tokenRect, type Rect } from "../boards/layout";
@@ -662,6 +662,18 @@ export class SceneRenderer {
     private async add(specs: ElementSpec[]): Promise<Set<string>> {
         const added = new Set<string>();
         let pending: DrawdyElementSchema[] = specs.map((s) => s.schema);
+        // Look first: a failed add shows an error toast in the platform, so avoid expected collisions.
+        if (pending.length > 0) {
+            const found = await tryCmd("command:scene:get-drawdy-elements", {
+                drawdyElementIds: pending.map((el) => el.drawdyElementId),
+                properties: ["type"],
+            });
+            if (found) {
+                const have = new Set(found.drawdyElements.map((e) => e.id));
+                for (const id of have) this.cache.set(id, UNKNOWN);
+                pending = pending.filter((el) => !have.has(el.drawdyElementId));
+            }
+        }
         for (let attempt = 0; attempt < 3 && pending.length > 0; attempt++) {
             try {
                 await cmd("command:scene:add-drawdy-elements", { elements: pending });

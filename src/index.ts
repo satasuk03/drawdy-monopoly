@@ -360,15 +360,14 @@ function sessionIO(gameId: string, frameId: string): SessionIO {
         async writeIntents(record, knownToExist) {
             const id = intentElementId(gameId, record.userId);
             const meta = { [META_KEY]: record };
-            if (knownToExist) {
-                try {
-                    const v = await dd.cmd("command:scene:update-drawdy-elements", {
-                        updates: [{ drawdyElementId: id, properties: { meta } }],
-                    });
-                    if (!v || v.updated > 0) return;
-                } catch (e) {
-                    if (!dd.isDdError(e, "not-found") && !dd.isDdError(e, "bad-argument")) throw e;
-                }
+            // Update first (a miss returns updated: 0 without a platform error toast); add only when absent.
+            try {
+                const v = await dd.cmd("command:scene:update-drawdy-elements", {
+                    updates: [{ drawdyElementId: id, properties: { meta } }],
+                });
+                if (!v || v.updated > 0) return;
+            } catch (e) {
+                if (!dd.isDdError(e, "not-found") && !dd.isDdError(e, "bad-argument")) throw e;
             }
             // Create it: a tiny invisible locked shape in the frame's corner.
             const origin = await readOrigin(frameId);
