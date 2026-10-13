@@ -1,6 +1,6 @@
 {
     "name": "board-tycoon",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "description": "Board Tycoon: a 2-6 player property-trading board game for Drawdy.",
     "license": "MIT",
     "private": true,

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Sound effects in the control panel: dice, coins, buying, building, cards, auctions, jail, trades, your turn, bankruptcy and the win. All sounds are made in the browser (no audio files). Use the speaker button at the top of the panel to mute; the choice is saved.
 
