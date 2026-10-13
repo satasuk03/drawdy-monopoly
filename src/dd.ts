@@ -58,6 +58,8 @@ type DdContext = {
 
 let ctx: DdContext | null = null;
 let requestSeq = 0;
+/** Per-module-instance prefix so a late reply to a reloaded instance can't resolve a new instance's request. */
+const instanceTag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 export function init(c: DdContext): void {
     ctx = c;
@@ -78,7 +80,7 @@ export async function cmd<T extends CommandType>(type: T, ...args: ReqArgs<T>): 
     const request = {
         type,
         driverId: ctx.manifest.driverId,
-        requestId: `bt-${requestSeq++}`,
+        requestId: `bt-${instanceTag}-${requestSeq++}`,
         ...(args.length > 0 ? { req: args[0] } : {}),
     } as unknown as DriverCommandRequest;
     let response: { res: { error?: ProtocolCommandError; value?: unknown } };
@@ -88,7 +90,8 @@ export async function cmd<T extends CommandType>(type: T, ...args: ReqArgs<T>): 
         // issueCommand itself should never reject, but never trust that.
         throw new DdError(type, "runtime", e instanceof Error ? e.message : String(e));
     }
-    const err = response?.res?.error;
+    const err = response?.res?.error as ProtocolCommandError | string | undefined;
+    if (typeof err === "string") throw new DdError(type, "runtime", err);
     if (err) throw new DdError(type, err.type, err.message, err.body);
     return response?.res?.value as ValueOf<T>;
 }

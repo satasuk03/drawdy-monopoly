@@ -8,9 +8,9 @@
     --ac: var(--dd-accent, #3b6cf4);
     --onac: var(--dd-on-accent, #ffffff);
     --r: var(--dd-radius-md, 8px);
-    --s1: var(--dd-space-1, 4px);
-    --s2: var(--dd-space-2, 8px);
-    --s3: var(--dd-space-3, 12px);
+    --s1: var(--dd-space-4, 4px);
+    --s2: var(--dd-space-8, 8px);
+    --s3: var(--dd-space-12, 12px);
     --font: var(--dd-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
     --good: #1f9d55;
     --bad: #d64545;
