@@ -8,9 +8,7 @@ Install it, click the Board Tycoon toolbar button, create a game, invite friends
 
 ## Watch the trailer
 
-<p align="center"><a href="docs/promo.mp4"><img src="docs/promo-teaser.gif" alt="Board Tycoon trailer preview. Click to watch the full 44-second video." width="720"></a></p>
-
-<p align="center"><a href="docs/promo.mp4"><b>▶ Watch the full trailer (44 s)</b></a></p>
+<p align="center"><img src="docs/promo-teaser.gif" alt="Board Tycoon trailer preview." width="720"></p>
 
 ## How to use
 
