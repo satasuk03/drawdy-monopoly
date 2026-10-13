@@ -1,8 +1,16 @@
+<p align="center"><img src="docs/banner.png" alt="Board Tycoon — a Drawdy extension. Roll, buy, build and bankrupt your friends, right on your Drawdy board." width="100%"></p>
+
 # Board Tycoon — Drawdy extension
 
 Board Tycoon is a 2–6 player Monopoly-style property-trading game that runs on your Drawdy whiteboard, with cloud boards for remote friends and hot-seat play on one screen.
 
 Install it, click the Board Tycoon toolbar button, create a game, invite friends to the cloud board, have them join, and start.
+
+## Watch the trailer
+
+<p align="center"><a href="docs/promo.mp4"><img src="docs/promo-teaser.gif" alt="Board Tycoon trailer preview. Click to watch the full 44-second video." width="720"></a></p>
+
+<p align="center"><a href="docs/promo.mp4"><b>▶ Watch the full trailer (44 s)</b></a></p>
 
 ## How to use
 
@@ -91,3 +99,5 @@ Hot reload works only on local boards.
 ---
 
 Board Tycoon is an independent fan-made game. It is not affiliated with, endorsed by or sponsored by Hasbro. MONOPOLY® is a registered trademark of Hasbro.
+
+Trailer music: "Gimme that Groove!" by Michael Ramir C. ([Mixkit](https://mixkit.co/free-stock-music/)). Sound effects from [Mixkit](https://mixkit.co/free-sound-effects/) and [Kenney](https://kenney.nl/assets/casino-audio) (CC0).
